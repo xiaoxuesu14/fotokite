@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
 
     // Initialize camera
     // VideoCapture cap("rtsp://192.168.2.202/z3-1.mp4");
-    VideoCapture cap(1);
+    VideoCapture cap(0);
   
     // double fx = 1.002560636338565e+03; // Mac webcam
     // double fy = 1.003227769508857e+03;
@@ -144,11 +144,11 @@ int main(int argc, char *argv[])
     double tetherScale = 29.348;
 
     // Fotokite *fotokite = new Fotokite("192.168.2.100", 8080);
-    Fotokite *fotokite = new Fotokite("/dev/cu.usbmodem1");
+    Fotokite *fotokite = new Fotokite("/dev/cu.usbmodem29");
 
     while (waitKey(30) != 27) {
 
-    	fotokite->printState();
+    	// fotokite->printState();
         //////////// Visual processing ////////////
 
         cap >> frame;
@@ -197,6 +197,7 @@ int main(int argc, char *argv[])
                     fontface, fontscale, Scalar(0xff, 0x99, 0), 2);
 
             matd_t *pose = homography_to_pose(det->H, fx, fy, cx, cy); // get camera pose from homography, Tag center is (0,0,0)
+            // rot2euler(pose);
             // MATD_EL(pose, 0, 2) = -MATD_EL(pose, 0, 2); // don't change for plotting box bc its OpenGL system
             // MATD_EL(pose, 1, 2) = -MATD_EL(pose, 1, 2);
             // MATD_EL(pose, 2, 0) = -MATD_EL(pose, 2, 0);
@@ -277,9 +278,9 @@ int main(int argc, char *argv[])
 
             double relTetherLength = fotokite->getRelTetherLength()/tetherScale; // all signs need to be verified 
             double Elevation = 1.57 - fotokite->getElevation();
-            double relAzimuth = fotokite->getRelAzimuth();
+            double relAzimuth = -fotokite->getRelAzimuth();
 
-            // cout<<"Tether_s: "<<relTetherLength<<", Elevation_s: "<<Elevation/3.1415926*180<<", Azimuth_s: "<<relAzimuth/3.1415926*180<<endl;
+            cout<<"Tether_s: "<<relTetherLength<<", Elevation_s: "<<Elevation/3.1415926*180<<", Azimuth_s: "<<relAzimuth/3.1415926*180<<endl;
 
             //Test
             // double QX = 1;
@@ -429,7 +430,10 @@ int main(int argc, char *argv[])
             // cout<<"y: "<<y_controlled<<endl;
             // cout<<"tether: "<<relTetherLength_controlled<<endl;
             // cout<<"Elevation: "<<Elevation_controlled<<endl;
-            double relAzimuth_controlled = atan(z_controlled/x_controlled); 
+            double relAzimuth_controlled = -atan2(z_controlled, x_controlled); 
+            if(abs(relAzimuth - relAzimuth_controlled)>3.14){
+                relAzimuth_controlled = - relAzimuth_controlled;
+            }
             // http://nghiaho.com/?page_id=846
             double yaw_controlled = atan2(-MATD_EL(g_gf_controlled, 2, 0),sqrt(r32*r32+r33*r33)); // theta_y
             double GimbalPitch_controlled = atan2(MATD_EL(g_gf_controlled, 2, 1),MATD_EL(g_gf_controlled, 2, 2)); // theta_x
@@ -437,15 +441,15 @@ int main(int argc, char *argv[])
 
             // here goes the actual commands to FK
             // tether control
-            // cout<<"Tether_c: "<<relTetherLength_controlled<<", Elevation_c: "<<Elevation_controlled/3.1415926*180<<", Azimuth_c: "<<relAzimuth_controlled/3.1415926*180<<endl;
+            cout<<"Tether_c: "<<relTetherLength_controlled<<", Elevation_c: "<<Elevation_controlled/3.1415926*180<<", Azimuth_c: "<<relAzimuth_controlled/3.1415926*180<<endl;
             double tether_tolerance = 0.5; // need to see the actual encoder value
             // cout<<relTetherLength_controlled<<endl;
             if (relTetherLength_controlled < relTetherLength - tether_tolerance){
-            	fotokite->posL(-10);// decrease tether length
+            	// fotokite->posL(-10);// decrease tether length
                 // cout<<"tether: "<<"-10"<<"\t";
             }
             else if (relTetherLength_controlled > relTetherLength + tether_tolerance){
-            	fotokite->posL(+10);// increase tether length
+            	// fotokite->posL(+10);// increase tether length
                 // cout<<"tether: "<<"+10"<<"\t";
             }
             else {
