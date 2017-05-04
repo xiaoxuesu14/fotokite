@@ -86,16 +86,16 @@ int main(int argc, char *argv[])
 
     // Initialize camera
     // VideoCapture cap("rtsp://192.168.2.202/z3-1.mp4");
-    VideoCapture cap(0);
+    VideoCapture cap(1);
   
-    // double fx = 1.002560636338565e+03; // Mac webcam
-    // double fy = 1.003227769508857e+03;
-    // double cx = 6.360588037637018e+02;
-    // double cy = 3.490447569094387e+02;
-    double fx = 8.846756775004567e+02; // FK GoPro
-    double fy = 8.907163863307561e+02;
-    double cx = 9.527944439036946e+02;
-    double cy = 5.362323663691869e+02;
+    double fx = 1.002560636338565e+03; // Mac webcam
+    double fy = 1.003227769508857e+03;
+    double cx = 6.360588037637018e+02;
+    double cy = 3.490447569094387e+02;
+    // double fx = 8.846756775004567e+02; // FK GoPro
+    // double fy = 8.907163863307561e+02;
+    // double cx = 9.527944439036946e+02;
+    // double cy = 5.362323663691869e+02;
     if (!cap.isOpened()) {
         cerr << "Couldn't open video capture device" << endl;
         return -1;
@@ -138,36 +138,61 @@ int main(int argc, char *argv[])
     double GimbalRoll = 0.0;
     double rollRate = 0.0;
     clock_t start_time = clock();
-    double duration;
+    clock_t duration;
 
     // Tether unit transform 
     double tetherScale = 29.348;
 
     // Fotokite *fotokite = new Fotokite("192.168.2.100", 8080);
-    Fotokite *fotokite = new Fotokite("/dev/cu.usbmodem29");
+    Fotokite *fotokite = new Fotokite("/dev/cu.usbmodem1");
 
     while (waitKey(30) != 27) {
-
-    	// fotokite->printState();
         //////////// Visual processing ////////////
-
         cap >> frame;
         cvtColor(frame, gray, COLOR_BGR2GRAY);
-
-        int image_width = gray.cols;
-        int image_height = gray.rows;
-
         // Make an image_u8_t header for the Mat data
         image_u8_t im = { .width = gray.cols,
             .height = gray.rows,
             .stride = gray.cols,
             .buf = gray.data
         };
-
         zarray_t *detections = apriltag_detector_detect(td, &im);
-        // cout << zarray_size(detections) << " tags detected" << endl;
 
-        // Draw detection outlines
+        //////////// Sensor Info  ////////////
+        // Get QX, QY, QZ, QW, relTetherLength, Elevation, relAzimuth
+        // Server
+        double QX = fotokite->getQX();
+        double QY = fotokite->getQY();
+        double QZ = fotokite->getQZ();
+        double QW = fotokite->getQW();
+        double t3 = +2.0 * (QW * QX + QY * QZ); // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
+        double t4 = +1.0 - 2.0 * (QX*QX + QY * QY);
+        double yaw = atan(t3/t4); // need to find the sign of yaw
+
+        double relTetherLength = fotokite->getRelTetherLength()/tetherScale; // all signs need to be verified 
+        double Elevation = 1.57 - fotokite->getElevation();
+        double relAzimuth = -fotokite->getRelAzimuth();
+
+        //Test
+        // double QX = 1;
+        // double QY = 0;
+        // double QZ = 0;
+        // double QW = 0;
+        // double t3 = +2.0 * (QW * QX + QY * QZ); // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
+        // double t4 = +1.0 - 2.0 * (QX*QX + QY * QY);
+        // double yaw = atan(t3/t4); // need to find the sign of yaw
+
+        // double relTetherLength = 100/tetherScale;
+        // double Elevation = 0.707;
+        // double relAzimuth = 0;
+
+        double x = relTetherLength*cos(Elevation)*cos(relAzimuth);
+        double y = relTetherLength*sin(Elevation);
+        double z = -relTetherLength*cos(Elevation)*sin(relAzimuth); 
+        double theta_z = GimbalRoll; //http://planning.cs.uiuc.edu/node102.html 
+        double theta_y = yaw;
+        double theta_x = GimbalPitch;
+
         for (int i = 0; i < zarray_size(detections); i++) { // could make this for loop only iterate onece
             apriltag_detection_t *det;
             zarray_get(detections, i, &det);
@@ -197,14 +222,7 @@ int main(int argc, char *argv[])
                     fontface, fontscale, Scalar(0xff, 0x99, 0), 2);
 
             matd_t *pose = homography_to_pose(det->H, fx, fy, cx, cy); // get camera pose from homography, Tag center is (0,0,0)
-            // rot2euler(pose);
-            // MATD_EL(pose, 0, 2) = -MATD_EL(pose, 0, 2); // don't change for plotting box bc its OpenGL system
-            // MATD_EL(pose, 1, 2) = -MATD_EL(pose, 1, 2);
-            // MATD_EL(pose, 2, 0) = -MATD_EL(pose, 2, 0);
-            // MATD_EL(pose, 2, 1) = -MATD_EL(pose, 2, 1); // rotation change
-            // MATD_EL(pose, 2, 3) = -MATD_EL(pose, 2, 3); // translation z change
 
-            //matd_print(pose, "%f ");
             matd_t *intrinsic = matd_create(3,4); // intrinsic matrix
             MATD_EL(intrinsic, 0, 0) = fx;
             MATD_EL(intrinsic, 0, 1) = 0;
@@ -265,41 +283,6 @@ int main(int argc, char *argv[])
                      Point(MATD_EL(end_points,0,0)/MATD_EL(end_points,2,0), MATD_EL(end_points,1,0)/MATD_EL(end_points,2,0)),
                      Scalar(0, 0xff, 0), 2);
 
-        //////////// Sensor Info  ////////////
-            //Get QX, QY, QZ, QW, relTetherLength, Elevation, relAzimuth
-            //Server
-            double QX = fotokite->getQX();
-            double QY = fotokite->getQY();
-            double QZ = fotokite->getQZ();
-            double QW = fotokite->getQW();
-            double t3 = +2.0 * (QW * QX + QY * QZ); // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
-            double t4 = +1.0 - 2.0 * (QX*QX + QY * QY);
-            double yaw = atan(t3/t4); // need to find the sign of yaw
-
-            double relTetherLength = fotokite->getRelTetherLength()/tetherScale; // all signs need to be verified 
-            double Elevation = 1.57 - fotokite->getElevation();
-            double relAzimuth = -fotokite->getRelAzimuth();
-
-            cout<<"Tether_s: "<<relTetherLength<<", Elevation_s: "<<Elevation/3.1415926*180<<", Azimuth_s: "<<relAzimuth/3.1415926*180<<endl;
-
-            //Test
-            // double QX = 1;
-            // double QY = 0;
-            // double QZ = 0;
-            // double QW = 0;
-            // double t3 = +2.0 * (QW * QX + QY * QZ); // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
-            // double t4 = +1.0 - 2.0 * (QX*QX + QY * QY);
-            // double yaw = atan(t3/t4); // need to find the sign of yaw
-            // // cout<<yaw<<endl;
-
-            // double relTetherLength = 100/tetherScale;
-            // double Elevation = 0.707;
-            // double relAzimuth = 0;
-
-
-            //GimbalPitch and GimbalRoll are estimated before update of last loop 
-            
-
         //////////// Controls  ////////////
             // get homogeneous transformation from tag to fotokite: inverse? of (camera) pose
             matd_t *g_ft_measured = pose; // http://answers.unity3d.com/storage/temp/12048-lefthandedtorighthanded.pdf
@@ -309,7 +292,6 @@ int main(int argc, char *argv[])
             MATD_EL(g_ft_measured, 2, 0) = -MATD_EL(g_ft_measured, 2, 0);
             MATD_EL(g_ft_measured, 2, 1) = -MATD_EL(g_ft_measured, 2, 1); // rotation change
             MATD_EL(g_ft_measured, 2, 3) = -MATD_EL(g_ft_measured, 2, 3); // translation z change
-            // rot2euler(g_ft_measured);
 
             // get desired homogeneous transformation from tag to fotokite
             // based on the pose from putting the tag at a desired position and orientation in front of the camera
@@ -375,24 +357,10 @@ int main(int argc, char *argv[])
             MATD_EL(g_ft_desired, 2, 1) = -MATD_EL(g_ft_desired, 2, 1); // rotation change
             MATD_EL(g_ft_desired, 2, 3) = -MATD_EL(g_ft_desired, 2, 3); // translation z change
 
-            
-
             // inverse g_ft_desired
             matd_t *g_ft_desired_inv = matd_inverse(g_ft_desired);
 
-            // get homogeneous transformation from fotokite to ground station
-            double x = relTetherLength*cos(Elevation)*cos(relAzimuth);
-            double y = relTetherLength*sin(Elevation);
-            double z = -relTetherLength*cos(Elevation)*sin(relAzimuth); 
-
-            cout<<"x_s: "<<x<<", y_s: "<<y<<", z_s: "<<z<<endl;
-
-
             matd_t *g_gf_measured = matd_create(4,4); //http://nghiaho.com/?page_id=846
-            double theta_z = GimbalRoll; //http://planning.cs.uiuc.edu/node102.html 
-            double theta_y = yaw;
-            double theta_x = GimbalPitch;
-
             MATD_EL(g_gf_measured, 0, 0) = cos(theta_z)*cos(theta_y);
             MATD_EL(g_gf_measured, 0, 1) = cos(theta_z)*sin(theta_y)*sin(theta_x)-sin(theta_z)*cos(theta_x);
             MATD_EL(g_gf_measured, 0, 2) = cos(theta_z)*sin(theta_y)*cos(theta_x)+sin(theta_z)*sin(theta_x);
@@ -419,17 +387,11 @@ int main(int argc, char *argv[])
             double y_controlled = MATD_EL(g_gf_controlled, 1, 3);
             double z_controlled = MATD_EL(g_gf_controlled, 2, 3);
 
-            cout<<"x_c: "<<x_controlled<<", y_c: "<<y_controlled<<", z_c: "<<z_controlled<<endl;
-
             // here solves the inverse kinematics 
             double r32 = MATD_EL(g_gf_controlled, 2, 1);
             double r33 = MATD_EL(g_gf_controlled, 2, 2);
-
             double relTetherLength_controlled = sqrt(x_controlled*x_controlled+y_controlled*y_controlled+z_controlled*z_controlled);
             double Elevation_controlled = asin(y_controlled/relTetherLength_controlled);
-            // cout<<"y: "<<y_controlled<<endl;
-            // cout<<"tether: "<<relTetherLength_controlled<<endl;
-            // cout<<"Elevation: "<<Elevation_controlled<<endl;
             double relAzimuth_controlled = -atan2(z_controlled, x_controlled); 
             if(abs(relAzimuth - relAzimuth_controlled)>3.14){
                 relAzimuth_controlled = - relAzimuth_controlled;
@@ -441,18 +403,17 @@ int main(int argc, char *argv[])
 
             // here goes the actual commands to FK
             // tether control
-            cout<<"Tether_c: "<<relTetherLength_controlled<<", Elevation_c: "<<Elevation_controlled/3.1415926*180<<", Azimuth_c: "<<relAzimuth_controlled/3.1415926*180<<endl;
-            double tether_tolerance = 0.5; // need to see the actual encoder value
-            // cout<<relTetherLength_controlled<<endl;
+            double tether_tolerance = 1; // need to see the actual encoder value
             if (relTetherLength_controlled < relTetherLength - tether_tolerance){
-            	// fotokite->posL(-10);// decrease tether length
+            	fotokite->posL(-5);// decrease tether length
                 // cout<<"tether: "<<"-10"<<"\t";
             }
             else if (relTetherLength_controlled > relTetherLength + tether_tolerance){
-            	// fotokite->posL(+10);// increase tether length
+            	fotokite->posL(+5);// increase tether length
                 // cout<<"tether: "<<"+10"<<"\t";
             }
             else {
+                fotokite->posL(0);
                 // cout<<"tether: "<<"  "<<"\t";
             }
 
@@ -467,11 +428,12 @@ int main(int argc, char *argv[])
                 // cout<<"elevation: "<<"+0.1"<<"\t";
             }
             else {
+                fotokite->posV(0);
                 // cout<<"elevation: "<<"  "<<"\t";
             }
 
             // azimuth control
-            double relAzimuth_tolerance = 0.1; // need to see the actual value
+            double relAzimuth_tolerance = 0.2; // need to see the actual value
             if (relAzimuth_controlled < relAzimuth - relAzimuth_tolerance){
             	fotokite->posH(+0.1);// decrease relAzimuth
                 // cout<<"azimuth: "<<"-0.1"<<"\t";
@@ -481,63 +443,93 @@ int main(int argc, char *argv[])
                 // cout<<"azimuth: "<<"+0.1"<<"\t";
             }
             else {
+                fotokite->posH(0);
                 // cout<<"azimuth: "<<"  "<<"\t";
             }
 
             // camera yaw control
-            double yaw_tolerance = 0.1;
+            double yaw_tolerance = 0.2;
             if (yaw_controlled < yaw - yaw_tolerance){
-                // fotokite->yaw(-0.1);// decrease yaw
+                fotokite->yaw(-0.1);// decrease yaw
                 // cout<<"yaw:    "<<"-0.1"<<"\t";
             }
             else if (yaw_controlled > yaw + yaw_tolerance){
-                // fotokite->yaw(+0.1);// increase yaw
+                fotokite->yaw(+0.2);// increase yaw
                 // cout<<"yaw:  "<<"+0.1"<<"\t";
             }
             else {
+                fotokite->yaw(0);
                 // cout<<"yaw   "<<"  "<<"\t";
             }
 
             // camera pitch and roll control (first estimate, then update)
-            duration = ((clock()-start_time))/1000; // ms to s 
-            GimbalPitch = GimbalPitch + pitchRate * duration;
-            GimbalRoll = GimbalRoll + rollRate * duration; 
+            duration = (clock()-start_time); // ms to s 
+            double duraton_in_s = float(duration)/CLOCKS_PER_SEC;
+            // cout<<duration<<endl;
+            GimbalPitch = GimbalPitch + pitchRate * duraton_in_s;
+            // cout<<"pitchRate: "<<pitchRate<<endl;
+            // cout<<"duration_in_s: "<<duraton_in_s<<endl;
+            // cout<<"GimbalPitch: "<<GimbalPitch<<endl;
+            GimbalRoll = GimbalRoll + rollRate * duraton_in_s; 
 
             // update GimbalPitch here 
-            double GimbalPitch_tolerance = 0.1;
+            double GimbalPitch_tolerance = 0.2;
             if (GimbalPitch_controlled < GimbalPitch - GimbalPitch_tolerance){
-                // fotokite->gimbalPitch(-0.1);// decrease pitch
+                pitchRate = -0.2; 
+                fotokite->gimbalPitch(pitchRate);// decrease pitch
                 // cout<<"pitch: "<<"-0.1"<<"\t";
             }
             else if (GimbalPitch_controlled > GimbalPitch + GimbalPitch_tolerance){
-                // fotokite->gimbalPitch(+0.1);// increase pitch
+                pitchRate = +0.2; 
+                fotokite->gimbalPitch(pitchRate);// increase pitch
                 // cout<<"pitch: "<<"+0.1"<<"\t";
             }
             else {
+                pitchRate = 0; 
+                fotokite->gimbalPitch(pitchRate);
                 // cout<<"pitch: "<<"  "<<"\t";
             }
 
-            // update GimbalRoll here
-            double GimbalRoll_tolerance = 0.1;
-            if (GimbalRoll_controlled < GimbalRoll - GimbalRoll_tolerance){
-                // fotokite->gimbalRoll(-0.1);// decrease roll
-                // cout<<"roll: "<<"-0.1"<<endl;
-            }
-            else if (GimbalRoll_controlled > GimbalRoll + GimbalRoll_tolerance){
-                // fotokite->gimbalRoll(+0.1);// increase roll
-                // cout<<"roll: "<<"+0.1"<<endl;
-            }
-            else {
-                // cout<<"roll: "<<"  "<<endl;
-            }
-
+            // // update GimbalRoll here
+            // double GimbalRoll_tolerance = 0.2;
+            // if (GimbalRoll_controlled < GimbalRoll - GimbalRoll_tolerance){
+            //     // fotokite->gimbalRoll(-0.1);// decrease roll
+            //     // cout<<"roll: "<<"-0.1"<<endl;
+            // }
+            // else if (GimbalRoll_controlled > GimbalRoll + GimbalRoll_tolerance){
+            //     // fotokite->gimbalRoll(+0.1);// increase roll
+            //     // cout<<"roll: "<<"+0.1"<<endl;
+            // }
+            // else {
+            //     // cout<<"roll: "<<"  "<<endl;
+            // }
+            cout<<"x_s: "<<x<<", y_s: "<<y<<", z_s: "<<z<<endl;
+            cout<<"x_c: "<<x_controlled<<", y_c: "<<y_controlled<<", z_c: "<<z_controlled<<endl;
+            cout<<"Tether_s: "<<relTetherLength<<", Elevation_s: "<<Elevation/3.1415926*180<<", Azimuth_s: "<<relAzimuth/3.1415926*180<<", Yaw_s: "<<yaw/3.1415926*180<<", Pitch_s: "<<GimbalPitch/3.1415926*180<<endl;
+            cout<<"Tether_c: "<<relTetherLength_controlled<<", Elevation_c: "<<Elevation_controlled/3.1415926*180<<", Azimuth_c: "<<relAzimuth_controlled/3.1415926*180<<", Yaw_c: "<<yaw_controlled/3.1415926*180<<", Pitch_c: "<<GimbalPitch_controlled/3.1415926*180<<endl;
             start_time = clock();
 
         }
         if(zarray_size(detections)==0){
+            cout<<"x_s: "<<x<<", y_s: "<<y<<", z_s: "<<z<<endl;
+            cout<<"Tether_s: "<<relTetherLength<<", Elevation_s: "<<Elevation/3.1415926*180<<", Azimuth_s: "<<relAzimuth/3.1415926*180<<", Yaw_s: "<<yaw/3.1415926*180<<", Pitch_s: "<<GimbalPitch/3.1415926*180<<endl;
+
+            duration = (clock()-start_time); // ms to s 
+            double duraton_in_s = float(duration)/CLOCKS_PER_SEC;
+            // cout<<duration<<endl;
+            GimbalPitch = GimbalPitch + pitchRate * duraton_in_s;
+            GimbalRoll = GimbalRoll + rollRate * duraton_in_s; 
+
+            fotokite->posL(0);
             fotokite->posV(0);
             fotokite->posH(0);
+            fotokite->yaw(0);
+            fotokite->gimbalPitch(0);
+            pitchRate = 0; 
+            start_time = clock();
+
         }
+        
         zarray_destroy(detections);
 
         imshow("Tag Detections", frame);
