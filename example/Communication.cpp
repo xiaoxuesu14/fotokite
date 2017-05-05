@@ -34,6 +34,12 @@ void Communication::startRemoteControl() {
     
     // Disable checksum
     send("Checksum 0\n");
+
+    // Set update frequency
+    send("Get_GroundStatus 0\n");
+    send("Get_Att 0\n");
+    send("Get_Pos 0\n");
+    send("Get_FlightStatus 0\n");
     
 }
 
