@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configurationDescriptor version="100">
+  <logicalFolder name="root" displayName="root" projectFiles="true" kind="ROOT">
+    <df root="." name="0">
+      <df name="apriltag">
+        <df name="common">
+          <in>doubles.h</in>
+          <in>doubles_floats_impl.h</in>
+          <in>floats.h</in>
+          <in>g2d.c</in>
+          <in>g2d.h</in>
+          <in>getopt.c</in>
+          <in>getopt.h</in>
+          <in>homography.c</in>
+          <in>homography.h</in>
+          <in>image_f32.c</in>
+          <in>image_f32.h</in>
+          <in>image_types.h</in>
+          <in>image_u8.c</in>
+          <in>image_u8.h</in>
+          <in>image_u8x3.c</in>
+          <in>image_u8x3.h</in>
+          <in>image_u8x4.c</in>
+          <in>image_u8x4.h</in>
+          <in>matd.c</in>
+          <in>matd.h</in>
+          <in>math_util.h</in>
+          <in>pam.c</in>
+          <in>pam.h</in>
+          <in>pjpeg-idct.c</in>
+          <in>pjpeg.c</in>
+          <in>pjpeg.h</in>
+          <in>pnm.c</in>
+          <in>pnm.h</in>
+          <in>postscript_utils.h</in>
+          <in>string_util.c</in>
+          <in>string_util.h</in>
+          <in>svd22.c</in>
+          <in>svd22.h</in>
+          <in>thash_impl.h</in>
+          <in>time_util.c</in>
+          <in>time_util.h</in>
+          <in>timeprofile.h</in>
+          <in>unionfind.c</in>
+          <in>unionfind.h</in>
+          <in>workerpool.c</in>
+          <in>workerpool.h</in>
+          <in>zarray.c</in>
+          <in>zarray.h</in>
+          <in>zhash.c</in>
+          <in>zhash.h</in>
+          <in>zmaxheap.c</in>
+          <in>zmaxheap.h</in>
+        </df>
+        <in>apriltag.c</in>
+        <in>apriltag.h</in>
+        <in>apriltag_math.h</in>
+        <in>apriltag_quad_thresh.c</in>
+        <in>tag16h5.c</in>
+        <in>tag16h5.h</in>
+        <in>tag25h7.c</in>
+        <in>tag25h7.h</in>
+        <in>tag25h9.c</in>
+        <in>tag25h9.h</in>
+        <in>tag36artoolkit.c</in>
+        <in>tag36artoolkit.h</in>
+        <in>tag36h10.c</in>
+        <in>tag36h10.h</in>
+        <in>tag36h11.c</in>
+        <in>tag36h11.h</in>
+      </df>
+      <df name="CMakeFiles">
+        <df name="3.7.2">
+          <df name="CompilerIdC">
+            <in>CMakeCCompilerId.c</in>
+          </df>
+          <df name="CompilerIdCXX">
+            <in>CMakeCXXCompilerId.cpp</in>
+          </df>
+        </df>
+        <df name="CMakeTmp">
+        </df>
+        <df name="Fotokite.dir">
+        </df>
+        <in>feature_tests.c</in>
+        <in>feature_tests.cxx</in>
+      </df>
+      <df name="logs">
+        <df name="apriltag">
+        </df>
+        <df name="features">
+        </df>
+      </df>
+      <in>Communication.cpp</in>
+      <in>Communication.hpp</in>
+      <in>DataLog.cpp</in>
+      <in>DataLog.h</in>
+      <in>Fotokite.cpp</in>
+      <in>Fotokite.hpp</in>
+      <in>FotokiteState.cpp</in>
+      <in>FotokiteState.hpp</in>
+      <in>Serial.cpp</in>
+      <in>Serial.h</in>
+      <in>SerialCommunication.cpp</in>
+      <in>SerialCommunication.hpp</in>
+      <in>SocketCommunication.cpp</in>
+      <in>SocketCommunication.hpp</in>
+      <in>VisualPoseEstimator.cpp</in>
+      <in>VisualPoseEstimator.hpp</in>
+      <in>main.cpp</in>
+    </df>
+  </logicalFolder>
+  <projectmakefile>Makefile</projectmakefile>
+  <confs>
+    <conf name="Default" type="0">
+      <toolsSet>
+        <developmentServer>localhost</developmentServer>
+        <platform>4</platform>
+      </toolsSet>
+      <compile>
+        <compiledirpicklist>
+          <compiledirpicklistitem>.</compiledirpicklistitem>
+          <compiledirpicklistitem>${AUTO_FOLDER}</compiledirpicklistitem>
+        </compiledirpicklist>
+        <compiledir>${AUTO_FOLDER}</compiledir>
+        <compilecommandpicklist>
+          <compilecommandpicklistitem>${MAKE} ${ITEM_NAME}.o</compilecommandpicklistitem>
+          <compilecommandpicklistitem>${AUTO_COMPILE}</compilecommandpicklistitem>
+        </compilecommandpicklist>
+        <compilecommand>${AUTO_COMPILE}</compilecommand>
+      </compile>
+      <dbx_gdbdebugger version="1">
+        <gdb_pathmaps>
+        </gdb_pathmaps>
+        <gdb_interceptlist>
+          <gdbinterceptoptions gdb_all="false" gdb_unhandled="true" gdb_unexpected="true"/>
+        </gdb_interceptlist>
+        <gdb_options>
+          <DebugOptions>
+          </DebugOptions>
+        </gdb_options>
+        <gdb_buildfirst gdb_buildfirst_overriden="false" gdb_buildfirst_old="false"/>
+      </dbx_gdbdebugger>
+      <nativedebugger version="1">
+        <engine>gdb</engine>
+      </nativedebugger>
+      <runprofile version="9">
+        <runcommandpicklist>
+          <runcommandpicklistitem>"${OUTPUT_PATH}"</runcommandpicklistitem>
+        </runcommandpicklist>
+        <runcommand>"${OUTPUT_PATH}"</runcommand>
+        <rundir>.</rundir>
+        <buildfirst>false</buildfirst>
+        <terminal-type>0</terminal-type>
+        <remove-instrumentation>0</remove-instrumentation>
+        <environment>
+        </environment>
+      </runprofile>
+    </conf>
+  </confs>
+</configurationDescriptor>
