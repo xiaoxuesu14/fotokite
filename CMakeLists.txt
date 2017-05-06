@@ -5,6 +5,8 @@ find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(${CMAKE_SOURCE_DIR}/apriltag/)
 link_directories(${CMAKE_SOURCE_DIR}/apriltag/)
+include_directories(${CMAKE_SOURCE_DIR}/examples/)
+link_directories(${CMAKE_SOURCE_DIR}/examples/)
 add_library(apriltag/apriltag STATIC IMPORTED)
 file(GLOB SOURCES
     *.h

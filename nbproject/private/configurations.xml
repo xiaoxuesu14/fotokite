@@ -85,10 +85,12 @@
         <in>feature_tests.c</in>
         <in>feature_tests.cxx</in>
       </df>
+      <df name="examples">
+        <in>features.cpp</in>
+        <in>fotokite.cpp</in>
+      </df>
       <df name="logs">
         <df name="apriltag">
-        </df>
-        <df name="features">
         </df>
       </df>
       <in>Communication.cpp</in>
