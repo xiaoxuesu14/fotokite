@@ -1,3 +1,0 @@
-/Users/jan/Documents/Research/Projects/Fotokite/Code/fotokite/CMakeFiles/rebuild_cache.dir
-/Users/jan/Documents/Research/Projects/Fotokite/Code/fotokite/CMakeFiles/edit_cache.dir
-/Users/jan/Documents/Research/Projects/Fotokite/Code/fotokite/CMakeFiles/Fotokite.dir
