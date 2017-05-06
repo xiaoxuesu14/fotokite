@@ -47,6 +47,7 @@ either expressed or implied, of the Regents of The University of Michigan.
 #include <ctime>
 
 #include "Fotokite.hpp" 
+#include "DataLog.h"
 
 using namespace std;
 using namespace cv;
@@ -167,11 +168,11 @@ int main(int argc, char *argv[])
         double QW = fotokite->getQW();
         double t3 = +2.0 * (QW * QX + QY * QZ); // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
         double t4 = +1.0 - 2.0 * (QX*QX + QY * QY);
-        double yaw = atan(t3/t4); // need to find the sign of yaw
+        double yaw = -atan2(t3,t4)-3.14/2; // need to find the sign of yaw, substract 90 degrees for initialization
 
         double relTetherLength = fotokite->getRelTetherLength()/tetherScale; // all signs need to be verified 
         double Elevation = 1.57 - fotokite->getElevation();
-        double relAzimuth = -fotokite->getRelAzimuth();
+        double relAzimuth = fotokite->getRelAzimuth();
 
         //Test
         // double QX = 1;
@@ -392,18 +393,31 @@ int main(int argc, char *argv[])
             double r33 = MATD_EL(g_gf_controlled, 2, 2);
             double relTetherLength_controlled = sqrt(x_controlled*x_controlled+y_controlled*y_controlled+z_controlled*z_controlled);
             double Elevation_controlled = asin(y_controlled/relTetherLength_controlled);
-            double relAzimuth_controlled = -atan2(z_controlled, x_controlled); 
+            double relAzimuth_controlled = atan2(x_controlled, z_controlled)-1.57;  //see diagram 
             if(abs(relAzimuth - relAzimuth_controlled)>3.14){
-                relAzimuth_controlled = - relAzimuth_controlled;
+            	if(relAzimuth < relAzimuth_controlled){
+                	relAzimuth_controlled = relAzimuth_controlled - 3.14;
+            	}
+            	else{ // relAzimuth >= relAzimuth_controlled
+            		relAzimuth_controlled = relAzimuth_controlled + 3.14;
+            	}
             }
             // http://nghiaho.com/?page_id=846
             double yaw_controlled = atan2(-MATD_EL(g_gf_controlled, 2, 0),sqrt(r32*r32+r33*r33)); // theta_y
+            if(abs(yaw - yaw_controlled)>3.14){
+            	if(yaw < yaw_controlled){
+                	yaw_controlled = yaw_controlled - 3.14;
+                }
+                else{ // yaw >= yaw_controlled
+                	yaw_controlled = yaw_controlled + 3.14;
+                }
+            }
             double GimbalPitch_controlled = atan2(MATD_EL(g_gf_controlled, 2, 1),MATD_EL(g_gf_controlled, 2, 2)); // theta_x
             // double GimbalRoll_controlled = atan2(MATD_EL(g_gf_controlled, 1, 0),MATD_EL(g_gf_controlled, 0, 0)); // theta_z
 
             // here goes the actual commands to FK
             // tether control
-            double tether_tolerance = 1; // need to see the actual encoder value
+            double tether_tolerance = 2; // tag unit
             if (relTetherLength_controlled < relTetherLength - tether_tolerance){
             	fotokite->posL(-5);// decrease tether length
                 // cout<<"tether: "<<"-10"<<"\t";
@@ -435,11 +449,11 @@ int main(int argc, char *argv[])
             // azimuth control
             double relAzimuth_tolerance = 0.2; // need to see the actual value
             if (relAzimuth_controlled < relAzimuth - relAzimuth_tolerance){
-            	fotokite->posH(+0.1);// decrease relAzimuth
+            	fotokite->posH(-0.1);// decrease relAzimuth
                 // cout<<"azimuth: "<<"-0.1"<<"\t";
             }
             else if (relAzimuth_controlled > relAzimuth + relAzimuth_tolerance){
-            	fotokite->posH(-0.1);// increase relAzimuth
+            	fotokite->posH(+0.1);// increase relAzimuth
                 // cout<<"azimuth: "<<"+0.1"<<"\t";
             }
             else {
@@ -475,12 +489,12 @@ int main(int argc, char *argv[])
             // update GimbalPitch here 
             double GimbalPitch_tolerance = 0.2;
             if (GimbalPitch_controlled < GimbalPitch - GimbalPitch_tolerance){
-                pitchRate = -0.2; 
+                pitchRate = 0; 
                 fotokite->gimbalPitch(pitchRate);// decrease pitch
                 // cout<<"pitch: "<<"-0.1"<<"\t";
             }
             else if (GimbalPitch_controlled > GimbalPitch + GimbalPitch_tolerance){
-                pitchRate = +0.2; 
+                pitchRate = 0; 
                 fotokite->gimbalPitch(pitchRate);// increase pitch
                 // cout<<"pitch: "<<"+0.1"<<"\t";
             }
@@ -503,15 +517,16 @@ int main(int argc, char *argv[])
             // else {
             //     // cout<<"roll: "<<"  "<<endl;
             // }
-            cout<<"x_s: "<<x<<", y_s: "<<y<<", z_s: "<<z<<endl;
-            cout<<"x_c: "<<x_controlled<<", y_c: "<<y_controlled<<", z_c: "<<z_controlled<<endl;
+            // cout<<"x_s: "<<x<<", y_s: "<<y<<", z_s: "<<z<<endl;
+            // cout<<"x_c: "<<x_controlled<<", y_c: "<<y_controlled<<", z_c: "<<z_controlled<<endl;
             cout<<"Tether_s: "<<relTetherLength<<", Elevation_s: "<<Elevation/3.1415926*180<<", Azimuth_s: "<<relAzimuth/3.1415926*180<<", Yaw_s: "<<yaw/3.1415926*180<<", Pitch_s: "<<GimbalPitch/3.1415926*180<<endl;
             cout<<"Tether_c: "<<relTetherLength_controlled<<", Elevation_c: "<<Elevation_controlled/3.1415926*180<<", Azimuth_c: "<<relAzimuth_controlled/3.1415926*180<<", Yaw_c: "<<yaw_controlled/3.1415926*180<<", Pitch_c: "<<GimbalPitch_controlled/3.1415926*180<<endl;
             start_time = clock();
+            DataLog::out<<relTetherLength<<"\t"<<Elevation/3.1415926*180<<"\t"<<relAzimuth/3.1415926*180<<"\t"<<yaw/3.1415926*180<<"\t"<<GimbalPitch/3.1415926*180<<"\t"<<endl;
 
         }
         if(zarray_size(detections)==0){
-            cout<<"x_s: "<<x<<", y_s: "<<y<<", z_s: "<<z<<endl;
+            // cout<<"x_s: "<<x<<", y_s: "<<y<<", z_s: "<<z<<endl;
             cout<<"Tether_s: "<<relTetherLength<<", Elevation_s: "<<Elevation/3.1415926*180<<", Azimuth_s: "<<relAzimuth/3.1415926*180<<", Yaw_s: "<<yaw/3.1415926*180<<", Pitch_s: "<<GimbalPitch/3.1415926*180<<endl;
 
             duration = (clock()-start_time); // ms to s 
