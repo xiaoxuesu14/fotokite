@@ -49,12 +49,14 @@
               <pElem>/usr/local/include</pElem>
               <pElem>/usr/local/include/opencv</pElem>
               <pElem>apriltag</pElem>
+              <pElem>examples</pElem>
             </incDir>
           </ccTool>
         </makeTool>
         <preBuild>
           <preBuildCommandWorkingDir>.</preBuildCommandWorkingDir>
           <preBuildCommand>${CMAKE} -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${IDE_CC} -DCMAKE_CXX_COMPILER=${IDE_CXX} -DCMAKE_C_FLAGS_DEBUG="-g3 -gdwarf-2" -DCMAKE_CXX_FLAGS_DEBUG="-g3 -gdwarf-2" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON .</preBuildCommand>
+          <preBuildFirst>true</preBuildFirst>
         </preBuild>
       </makefileType>
       <item path="Communication.cpp" ex="false" tool="1" flavor2="8">
