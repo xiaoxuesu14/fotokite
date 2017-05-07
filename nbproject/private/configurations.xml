@@ -96,6 +96,8 @@
       <df name="logs">
         <df name="apriltag">
         </df>
+        <df name="features">
+        </df>
       </df>
       <in>Communication.cpp</in>
       <in>Communication.hpp</in>

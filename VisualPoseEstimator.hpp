@@ -66,7 +66,7 @@ private:
     const int angleOutlierCounterThreshold = 3; // After this number of consecutive rejections, the new angle value will be accepted
     
     // Motion detection
-    const int motionThreshold = 50; // If average distance of corresponding features is higher than this threshold, the camera have moved
+    const int motionThreshold = 20; // If average distance of corresponding features is higher than this threshold, the camera have moved
     
     // Small angle detection
     const int smallAngleThreshold = 5; // If all three angles are less than threshold, the angle is considered small
