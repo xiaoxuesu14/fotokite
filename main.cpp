@@ -54,7 +54,7 @@ using namespace std;
 using namespace cv;
 
 #define PI 3.14159265
-//#define FEATURES
+#define FEATURES
 
 void rot2euler(matd_t *R) // http://nghiaho.com/?page_id=846
 {
@@ -106,7 +106,7 @@ matd_t * get_homo_transform(double x, double y, double z, double theta_x, double
 }
 
 void get_fotokite_controls(double relAzimuth, double yaw, matd_t *g_gf_controlled, double& relTetherLength_controlled, double& Elevation_controlled, double& relAzimuth_controlled, double& yaw_controlled, double& GimbalPitch_controlled, double& GimbalRoll_controlled) {
-    
+
     double x_controlled = MATD_EL(g_gf_controlled, 0, 3);
     double y_controlled = MATD_EL(g_gf_controlled, 1, 3);
     double z_controlled = MATD_EL(g_gf_controlled, 2, 3);
@@ -135,6 +135,74 @@ void get_fotokite_controls(double relAzimuth, double yaw, matd_t *g_gf_controlle
     }
     GimbalPitch_controlled = atan2(MATD_EL(g_gf_controlled, 2, 1), MATD_EL(g_gf_controlled, 2, 2)); // theta_x
     GimbalRoll_controlled = atan2(MATD_EL(g_gf_controlled, 1, 0), MATD_EL(g_gf_controlled, 0, 0)); // theta_z
+}
+
+void tetherControl(Fotokite*& fotokite, double relTetherLength, double relTetherLength_controlled, double tether_tolerance) {
+    if (relTetherLength_controlled < relTetherLength - tether_tolerance) {
+        fotokite->posL(-5); // decrease tether length
+//         cout<<"tether: "<<"-10"<<"\t";
+    } else if (relTetherLength_controlled > relTetherLength + tether_tolerance) {
+        fotokite->posL(+5); // increase tether length
+//         cout<<"tether: "<<"+10"<<"\t";
+    } else {
+        fotokite->posL(0);
+//         cout<<"tether: "<<"  "<<"\t";
+    }
+}
+
+void elevationControl(Fotokite*& fotokite, double Elevation, double Elevation_controlled, double Elevation_tolerance) {
+    if (Elevation_controlled < Elevation - Elevation_tolerance) {
+        fotokite->posV(-0.1); // decrease elevation
+        // cout<<"elevation: "<<"-0.1"<<"\t";
+    } else if (Elevation_controlled > Elevation + Elevation_tolerance) {
+        fotokite->posV(+0.1); // increase elevation
+        // cout<<"elevation: "<<"+0.1"<<"\t";
+    } else {
+        fotokite->posV(0);
+        // cout<<"elevation: "<<"  "<<"\t";
+    }
+}
+
+void azimuthControl(Fotokite*& fotokite, double relAzimuth, double relAzimuth_controlled, double relAzimuth_tolerance) {
+    if (relAzimuth_controlled < relAzimuth - relAzimuth_tolerance) {
+        fotokite->posH(-0.1); // decrease relAzimuth
+        // cout<<"azimuth: "<<"-0.1"<<"\t";
+    } else if (relAzimuth_controlled > relAzimuth + relAzimuth_tolerance) {
+        fotokite->posH(+0.1); // increase relAzimuth
+        // cout<<"azimuth: "<<"+0.1"<<"\t";
+    } else {
+        fotokite->posH(0);
+        // cout<<"azimuth: "<<"  "<<"\t";
+    }
+}
+
+void pitchControl(Fotokite*& fotokite, double GimbalPitch, double GimbalPitch_controlled, double GimbalPitch_tolerance, double& pitchRate) {
+    if (GimbalPitch_controlled < GimbalPitch - GimbalPitch_tolerance) {
+        pitchRate = -0.2;
+        fotokite->gimbalPitch(pitchRate); // decrease pitch
+        // cout<<"pitch: "<<"-0.1"<<"\t";
+    } else if (GimbalPitch_controlled > GimbalPitch + GimbalPitch_tolerance) {
+        pitchRate = 0.2;
+        fotokite->gimbalPitch(pitchRate); // increase pitch
+        // cout<<"pitch: "<<"+0.1"<<"\t";
+    } else {
+        pitchRate = 0;
+        fotokite->gimbalPitch(pitchRate);
+        // cout<<"pitch: "<<"  "<<"\t";
+    }
+}
+
+void rollControl(Fotokite*& fotokite, double GimbalRoll, double GimbalRoll_controlled, double GimbalRoll_tolerance) {
+    if (GimbalRoll_controlled < GimbalRoll - GimbalRoll_tolerance) {
+        fotokite->gimbalRoll(-0.1); // decrease roll
+        // cout<<"roll: "<<"-0.1"<<endl;
+    } else if (GimbalRoll_controlled > GimbalRoll + GimbalRoll_tolerance) {
+        fotokite->gimbalRoll(+0.1); // increase roll
+        // cout<<"roll: "<<"+0.1"<<endl;
+    } else {
+        fotokite->gimbalRoll(0); // increase roll
+        // cout<<"roll: "<<"  "<<endl;
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -481,49 +549,23 @@ int main(int argc, char *argv[]) {
             double GimbalPitch_controlled;
             double GimbalRoll_controlled;
             get_fotokite_controls(relAzimuth, yaw, g_gf_controlled, relTetherLength_controlled, Elevation_controlled, relAzimuth_controlled, yaw_controlled, GimbalPitch_controlled, GimbalRoll_controlled);
-            
+
             // here goes the actual commands to FK
             // tether control
             double tether_tolerance = 2; // tag unit
-            if (relTetherLength_controlled < relTetherLength - tether_tolerance) {
-                fotokite->posL(-5); // decrease tether length
-                // cout<<"tether: "<<"-10"<<"\t";
-            } else if (relTetherLength_controlled > relTetherLength + tether_tolerance) {
-                fotokite->posL(+5); // increase tether length
-                // cout<<"tether: "<<"+10"<<"\t";
-            } else {
-                fotokite->posL(0);
-                // cout<<"tether: "<<"  "<<"\t";
-            }
+            tetherControl(fotokite, relTetherLength, relTetherLength_controlled, tether_tolerance);
 
             // elevation control
             double Elevation_tolerance = 0.2; // need to see the actual value
-            if (Elevation_controlled < Elevation - Elevation_tolerance) {
-                fotokite->posV(-0.1); // decrease elevation
-                // cout<<"elevation: "<<"-0.1"<<"\t";
-            } else if (Elevation_controlled > Elevation + Elevation_tolerance) {
-                fotokite->posV(+0.1); // increase elevation
-                // cout<<"elevation: "<<"+0.1"<<"\t";
-            } else {
-                fotokite->posV(0);
-                // cout<<"elevation: "<<"  "<<"\t";
-            }
+            elevationControl(fotokite, Elevation, Elevation_controlled, Elevation_tolerance);
 
             // azimuth control
             double relAzimuth_tolerance = 0.2; // need to see the actual value
-            if (relAzimuth_controlled < relAzimuth - relAzimuth_tolerance) {
-                fotokite->posH(-0.1); // decrease relAzimuth
-                // cout<<"azimuth: "<<"-0.1"<<"\t";
-            } else if (relAzimuth_controlled > relAzimuth + relAzimuth_tolerance) {
-                fotokite->posH(+0.1); // increase relAzimuth
-                // cout<<"azimuth: "<<"+0.1"<<"\t";
-            } else {
-                fotokite->posH(0);
-                // cout<<"azimuth: "<<"  "<<"\t";
-            }
+            azimuthControl(fotokite, relAzimuth, relAzimuth_controlled, relAzimuth_tolerance);
 
             // camera yaw control
-            yawControl(fotokite, yaw, yaw_controlled, 0.2);
+            double yaw_tolerance = 0.2; // need to see the actual value
+            yawControl(fotokite, yaw, yaw_controlled, yaw_tolerance);
 
             // camera pitch and roll control (first estimate, then update)
             duration = (clock() - start_time); // ms to s 
@@ -537,33 +579,12 @@ int main(int argc, char *argv[]) {
 
             // update GimbalPitch here 
             double GimbalPitch_tolerance = 0.2;
-            if (GimbalPitch_controlled < GimbalPitch - GimbalPitch_tolerance) {
-                pitchRate = -0.2;
-                fotokite->gimbalPitch(pitchRate); // decrease pitch
-                // cout<<"pitch: "<<"-0.1"<<"\t";
-            } else if (GimbalPitch_controlled > GimbalPitch + GimbalPitch_tolerance) {
-                pitchRate = 0.2;
-                fotokite->gimbalPitch(pitchRate); // increase pitch
-                // cout<<"pitch: "<<"+0.1"<<"\t";
-            } else {
-                pitchRate = 0;
-                fotokite->gimbalPitch(pitchRate);
-                // cout<<"pitch: "<<"  "<<"\t";
-            }
+            pitchControl(fotokite, GimbalPitch, GimbalPitch_controlled, GimbalPitch_tolerance, pitchRate);
 
-            // // update GimbalRoll here
-            // double GimbalRoll_tolerance = 0.2;
-            // if (GimbalRoll_controlled < GimbalRoll - GimbalRoll_tolerance){
-            //     // fotokite->gimbalRoll(-0.1);// decrease roll
-            //     // cout<<"roll: "<<"-0.1"<<endl;
-            // }
-            // else if (GimbalRoll_controlled > GimbalRoll + GimbalRoll_tolerance){
-            //     // fotokite->gimbalRoll(+0.1);// increase roll
-            //     // cout<<"roll: "<<"+0.1"<<endl;
-            // }
-            // else {
-            //     // cout<<"roll: "<<"  "<<endl;
-            // }
+            // update GimbalRoll here
+            double GimbalRoll_tolerance = 0.2;
+            //             rollControl(fotokite, GimbalRoll, GimbalRoll_controlled, GimbalRoll_tolerance);
+
             // cout<<"x_s: "<<x<<", y_s: "<<y<<", z_s: "<<z<<endl;
             // cout<<"x_c: "<<x_controlled<<", y_c: "<<y_controlled<<", z_c: "<<z_controlled<<endl;
             cout << "Tether_s: " << relTetherLength << ", Elevation_s: " << Elevation / PI * 180 << ", Azimuth_s: " << relAzimuth / PI * 180 << ", Yaw_s: " << yaw / PI * 180 << ", Pitch_s: " << GimbalPitch / PI * 180 << endl;
@@ -584,21 +605,42 @@ int main(int argc, char *argv[]) {
 
         // Print pose
         visualPoseEstimator->printPose();
+        
+        // Print translation norm
+//        cout << sqrt(pow(translationMatrix.at<double>(0,0), 2) + pow(translationMatrix.at<double>(1,0), 2) + pow(translationMatrix.at<double>(2,0), 2)) << endl;
 
         // Yaw
         yaw = degreeToRadians(eulerAngles[1]);
         double yaw_controlled = 0;
         yawControl(fotokite, yaw, yaw_controlled, 0.08);
 
-        // Pitch
-        //        pitch = degreeToRadians(eulerAngles[0]);
-        //        double pitch_controlled = 0;
-
         // Translation
+        
+        double translation_scale_factor = 10;
 
         matd_t * g_gf_measured = get_homo_transform(x, y, z, theta_x, theta_y, theta_z);
-        matd_t * g_fc = get_homo_transform(translationMatrix.at<double>(0, 0), translationMatrix.at<double>(1, 0), -translationMatrix.at<double>(2, 0), 0, 0, 0);
+        matd_t * g_fc = get_homo_transform(translation_scale_factor * -translationMatrix.at<double>(0, 0), translation_scale_factor * -translationMatrix.at<double>(1, 0), translation_scale_factor * translationMatrix.at<double>(2, 0), 0, 0, 0);
         matd_t * g_gc = matd_multiply(g_gf_measured, g_fc);
+
+        double relTetherLength_controlled;
+        double Elevation_controlled;
+        double relAzimuth_controlled;
+        double GimbalPitch_controlled;
+        double GimbalRoll_controlled;
+
+        get_fotokite_controls(relAzimuth, yaw, g_gc, relTetherLength_controlled, Elevation_controlled, relAzimuth_controlled, yaw_controlled, GimbalPitch_controlled, GimbalRoll_controlled);
+
+        // Tether
+        double tether_tolerance = 2; // tag unit
+        tetherControl(fotokite, relTetherLength, relTetherLength_controlled, tether_tolerance);
+
+        // Elevation
+        double Elevation_tolerance = 0.2; // need to see the actual value
+        elevationControl(fotokite, Elevation, Elevation_controlled, Elevation_tolerance);
+
+        // Azimuth
+        double relAzimuth_tolerance = 0.2; // need to see the actual value
+        azimuthControl(fotokite, relAzimuth, relAzimuth_controlled, relAzimuth_tolerance);
 
 #else
         if (zarray_size(detections) == 0) {
