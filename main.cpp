@@ -28,7 +28,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 The views and conclusions contained in the software and documentation are those
 of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the Regents of The University of Michigan.
-*/
+ */
 
 #include <iostream>
 
@@ -47,23 +47,97 @@ either expressed or implied, of the Regents of The University of Michigan.
 #include <ctime>
 
 #include "Fotokite.hpp" 
+#include "VisualPoseEstimator.hpp"
 #include "DataLog.h"
 
 using namespace std;
 using namespace cv;
 
+#define PI 3.14159265
+//#define FEATURES
+
 void rot2euler(matd_t *R) // http://nghiaho.com/?page_id=846
 {
-    double temp = MATD_EL(R,2,1)*MATD_EL(R,2,1)+MATD_EL(R,2,2)*MATD_EL(R,2,2);
+    double temp = MATD_EL(R, 2, 1) * MATD_EL(R, 2, 1) + MATD_EL(R, 2, 2) * MATD_EL(R, 2, 2);
     temp = sqrt(temp);
-    double theta_x = atan2(MATD_EL(R,2,1),MATD_EL(R,2,2))/3.1415926*180;
-    double theta_y = atan2(-MATD_EL(R,2,0),temp)/3.1415926*180;
-    double theta_z = atan2(MATD_EL(R,1,0), MATD_EL(R,0,0))/3.1415926*180;
-    cout<<"theta x: "<<theta_x<<",\ttheta_y: "<<theta_y<<",\ttheta_z: "<<theta_z<<",\tx: "<<MATD_EL(R,0,3)<<",\ty: "<<MATD_EL(R,1,3)<<",\tz: "<<MATD_EL(R,2,3)<<endl;
+    double theta_x = atan2(MATD_EL(R, 2, 1), MATD_EL(R, 2, 2)) / PI * 180;
+    double theta_y = atan2(-MATD_EL(R, 2, 0), temp) / PI * 180;
+    double theta_z = atan2(MATD_EL(R, 1, 0), MATD_EL(R, 0, 0)) / PI * 180;
+    cout << "theta x: " << theta_x << ",\ttheta_y: " << theta_y << ",\ttheta_z: " << theta_z << ",\tx: " << MATD_EL(R, 0, 3) << ",\ty: " << MATD_EL(R, 1, 3) << ",\tz: " << MATD_EL(R, 2, 3) << endl;
 }
 
-int main(int argc, char *argv[])
-{
+double degreeToRadians(double degrees) {
+    return (degrees / 180) * PI;
+}
+
+void yawControl(Fotokite*& fotokite, double yaw, double yaw_controlled, double yaw_tolerance) {
+    if (yaw_controlled < yaw - yaw_tolerance) {
+        fotokite->yaw(-0.1); // decrease yaw
+        // cout<<"yaw:    "<<"-0.1"<<"\t";
+    } else if (yaw_controlled > yaw + yaw_tolerance) {
+        fotokite->yaw(+0.2); // increase yaw
+        // cout<<"yaw:  "<<"+0.1"<<"\t";
+    } else {
+        fotokite->yaw(0);
+        // cout<<"yaw   "<<"  "<<"\t";
+    }
+}
+
+matd_t * get_homo_transform(double x, double y, double z, double theta_x, double theta_y, double theta_z) {
+    matd_t *g_gf_measured = matd_create(4, 4); //http://nghiaho.com/?page_id=846
+    MATD_EL(g_gf_measured, 0, 0) = cos(theta_z) * cos(theta_y);
+    MATD_EL(g_gf_measured, 0, 1) = cos(theta_z) * sin(theta_y) * sin(theta_x) - sin(theta_z) * cos(theta_x);
+    MATD_EL(g_gf_measured, 0, 2) = cos(theta_z) * sin(theta_y) * cos(theta_x) + sin(theta_z) * sin(theta_x);
+    MATD_EL(g_gf_measured, 0, 3) = x;
+    MATD_EL(g_gf_measured, 1, 0) = sin(theta_z) * cos(theta_y);
+    MATD_EL(g_gf_measured, 1, 1) = sin(theta_z) * sin(theta_y) * sin(theta_x) + cos(theta_z) * cos(theta_x);
+    MATD_EL(g_gf_measured, 1, 2) = sin(theta_z) * sin(theta_y) * cos(theta_x) - cos(theta_z) * sin(theta_x);
+    MATD_EL(g_gf_measured, 1, 3) = y;
+    MATD_EL(g_gf_measured, 2, 0) = -1 * sin(theta_y);
+    MATD_EL(g_gf_measured, 2, 1) = cos(theta_y) * sin(theta_x);
+    MATD_EL(g_gf_measured, 2, 2) = cos(theta_y) * cos(theta_x);
+    MATD_EL(g_gf_measured, 2, 3) = z;
+    MATD_EL(g_gf_measured, 3, 0) = 0;
+    MATD_EL(g_gf_measured, 3, 1) = 0;
+    MATD_EL(g_gf_measured, 3, 2) = 0;
+    MATD_EL(g_gf_measured, 3, 3) = 1;
+
+    return g_gf_measured;
+}
+
+void get_fotokite_controls(double relAzimuth, double yaw, matd_t *g_gf_controlled, double& relTetherLength_controlled, double& Elevation_controlled, double& relAzimuth_controlled, double& yaw_controlled, double& GimbalPitch_controlled, double& GimbalRoll_controlled) {
+    
+    double x_controlled = MATD_EL(g_gf_controlled, 0, 3);
+    double y_controlled = MATD_EL(g_gf_controlled, 1, 3);
+    double z_controlled = MATD_EL(g_gf_controlled, 2, 3);
+
+    // here solves the inverse kinematics 
+    double r32 = MATD_EL(g_gf_controlled, 2, 1);
+    double r33 = MATD_EL(g_gf_controlled, 2, 2);
+    relTetherLength_controlled = sqrt(x_controlled * x_controlled + y_controlled * y_controlled + z_controlled * z_controlled);
+    Elevation_controlled = asin(y_controlled / relTetherLength_controlled);
+    relAzimuth_controlled = atan2(x_controlled, z_controlled) - PI / 2; //see diagram 
+    if (abs(relAzimuth - relAzimuth_controlled) > PI) {
+        if (relAzimuth < relAzimuth_controlled) {
+            relAzimuth_controlled = relAzimuth_controlled - 2 * PI;
+        } else { // relAzimuth >= relAzimuth_controlled
+            relAzimuth_controlled = relAzimuth_controlled + 2 * PI;
+        }
+    }
+    // http://nghiaho.com/?page_id=846
+    yaw_controlled = atan2(-MATD_EL(g_gf_controlled, 2, 0), sqrt(r32 * r32 + r33 * r33)); // theta_y
+    if (abs(yaw - yaw_controlled) > PI) {
+        if (yaw < yaw_controlled) {
+            yaw_controlled = yaw_controlled - 2 * PI;
+        } else { // yaw >= yaw_controlled
+            yaw_controlled = yaw_controlled + 2 * PI;
+        }
+    }
+    GimbalPitch_controlled = atan2(MATD_EL(g_gf_controlled, 2, 1), MATD_EL(g_gf_controlled, 2, 2)); // theta_x
+    GimbalRoll_controlled = atan2(MATD_EL(g_gf_controlled, 1, 0), MATD_EL(g_gf_controlled, 0, 0)); // theta_z
+}
+
+int main(int argc, char *argv[]) {
     getopt_t *getopt = getopt_create();
 
     getopt_add_bool(getopt, 'h', "help", 0, "Show this help");
@@ -88,26 +162,26 @@ int main(int argc, char *argv[])
     // Initialize camera
     // VideoCapture cap("rtsp://192.168.2.202/z3-1.mp4");
     VideoCapture cap(0);
-  
-//    double fx = 1.002560636338565e+03; // Mac webcam
-//    double fy = 1.003227769508857e+03;
-//    double cx = 6.360588037637018e+02;
-//    double cy = 3.490447569094387e+02;
+
+    //    double fx = 1.002560636338565e+03; // Mac webcam
+    //    double fy = 1.003227769508857e+03;
+    //    double cx = 6.360588037637018e+02;
+    //    double cy = 3.490447569094387e+02;
     // double fx = 8.846756775004567e+02; // FK GoPro original
     // double fy = 8.907163863307561e+02;
     // double cx = 9.527944439036946e+02;
     // double cy = 5.362323663691869e+02;
-//     double fx = 8.6258481434823898e+02; // FK GoPro lab
-//     double fy = 8.6258481434823898e+02;
-//     double cx = 960;
-//     double cy = 540;
-     double fx = 3.9275342820077321e+02; // FK GoPro lab resized
-     double fy = 3.9275342820077321e+02;
-     double cx = 400;
-     double cy = 240;
-     
-     Mat distortionCoefficients = (Mat_<double>(1, 5) << -2.9582896443544004e-01, 1.2593415853281231e-01, 0, 0, -2.5630954575459493e-02);
-     
+    //     double fx = 8.6258481434823898e+02; // FK GoPro lab
+    //     double fy = 8.6258481434823898e+02;
+    //     double cx = 960;
+    //     double cy = 540;
+    double fx = 3.9275342820077321e+02; // FK GoPro lab resized
+    double fy = 3.9275342820077321e+02;
+    double cx = 400;
+    double cy = 240;
+
+    Mat distortionCoefficients = (Mat_<double>(1, 5) << -2.9582896443544004e-01, 1.2593415853281231e-01, 0, 0, -2.5630954575459493e-02);
+
     if (!cap.isOpened()) {
         cerr << "Couldn't open video capture device" << endl;
         return -1;
@@ -155,8 +229,29 @@ int main(int argc, char *argv[])
     // Tether unit transform 
     double tetherScale = 29.348;
 
+    // Initialize Fotokite
     // Fotokite *fotokite = new Fotokite("192.168.2.100", 8080);
     Fotokite *fotokite = new Fotokite("/dev/cu.usbmodem1");
+
+#ifdef FEATURES
+
+    // Initialize visual pose estimator
+    VisualPoseEstimator * visualPoseEstimator = new VisualPoseEstimator(fx, Point(cx, cy), distortionCoefficients);
+
+    // Initialize initial frame
+    Mat initialFrame;
+
+    // Get current frame (get it twice since the first one might be bad)
+    cap >> initialFrame;
+    cap >> initialFrame;
+
+    // Resize initial frame
+    resize(initialFrame, initialFrame, Size(800, 480)); // resize the frame
+
+    // Fix current pose
+    visualPoseEstimator->setDesiredPose(initialFrame);
+
+#endif
 
     while (waitKey(30) != 27) {
         //////////// Visual processing ////////////
@@ -164,11 +259,10 @@ int main(int argc, char *argv[])
         resize(frame, frame, Size(800, 480)); // resize the frame
         cvtColor(frame, gray, COLOR_BGR2GRAY);
         // Make an image_u8_t header for the Mat data
-        image_u8_t im = { .width = gray.cols,
+        image_u8_t im = {.width = gray.cols,
             .height = gray.rows,
             .stride = gray.cols,
-            .buf = gray.data
-        };
+            .buf = gray.data};
         zarray_t *detections = apriltag_detector_detect(td, &im);
 
         //////////// Sensor Info  ////////////
@@ -179,10 +273,10 @@ int main(int argc, char *argv[])
         double QZ = fotokite->getQZ();
         double QW = fotokite->getQW();
         double t3 = +2.0 * (QW * QX + QY * QZ); // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
-        double t4 = +1.0 - 2.0 * (QX*QX + QY * QY);
-        double yaw = -atan2(t3,t4)-3.14/2; // need to find the sign of yaw, substract 90 degrees for initialization
+        double t4 = +1.0 - 2.0 * (QX * QX + QY * QY);
+        double yaw = -atan2(t3, t4) - PI / 2; // need to find the sign of yaw, substract 90 degrees for initialization
 
-        double relTetherLength = fotokite->getRelTetherLength()/tetherScale; // all signs need to be verified 
+        double relTetherLength = fotokite->getRelTetherLength() / tetherScale; // all signs need to be verified 
         double Elevation = 1.57 - fotokite->getElevation();
         double relAzimuth = fotokite->getRelAzimuth();
 
@@ -199,9 +293,9 @@ int main(int argc, char *argv[])
         // double Elevation = 0.707;
         // double relAzimuth = 0;
 
-        double x = relTetherLength*cos(Elevation)*cos(relAzimuth);
-        double y = relTetherLength*sin(Elevation);
-        double z = -relTetherLength*cos(Elevation)*sin(relAzimuth); 
+        double x = relTetherLength * cos(Elevation) * cos(relAzimuth);
+        double y = relTetherLength * sin(Elevation);
+        double z = -relTetherLength * cos(Elevation) * sin(relAzimuth);
         double theta_z = GimbalRoll; //http://planning.cs.uiuc.edu/node102.html 
         double theta_y = yaw;
         double theta_x = GimbalPitch;
@@ -210,17 +304,17 @@ int main(int argc, char *argv[])
             apriltag_detection_t *det;
             zarray_get(detections, i, &det);
             line(frame, Point(det->p[0][0], det->p[0][1]),
-                     Point(det->p[1][0], det->p[1][1]),
-                     Scalar(0, 0xff, 0), 2);
+                    Point(det->p[1][0], det->p[1][1]),
+                    Scalar(0, 0xff, 0), 2);
             line(frame, Point(det->p[0][0], det->p[0][1]),
-                     Point(det->p[3][0], det->p[3][1]),
-                     Scalar(0, 0, 0xff), 2);
+                    Point(det->p[3][0], det->p[3][1]),
+                    Scalar(0, 0, 0xff), 2);
             line(frame, Point(det->p[1][0], det->p[1][1]),
-                     Point(det->p[2][0], det->p[2][1]),
-                     Scalar(0xff, 0, 0), 2);
+                    Point(det->p[2][0], det->p[2][1]),
+                    Scalar(0xff, 0, 0), 2);
             line(frame, Point(det->p[2][0], det->p[2][1]),
-                     Point(det->p[3][0], det->p[3][1]),
-                     Scalar(0xff, 0, 0), 2);
+                    Point(det->p[3][0], det->p[3][1]),
+                    Scalar(0xff, 0, 0), 2);
 
             stringstream ss;
             ss << det->id;
@@ -229,14 +323,14 @@ int main(int argc, char *argv[])
             double fontscale = 1.0;
             int baseline;
             Size textsize = getTextSize(text, fontface, fontscale, 2,
-                                            &baseline);
-            putText(frame, text, Point(det->c[0]-textsize.width/2,
-                                       det->c[1]+textsize.height/2),
+                    &baseline);
+            putText(frame, text, Point(det->c[0] - textsize.width / 2,
+                    det->c[1] + textsize.height / 2),
                     fontface, fontscale, Scalar(0xff, 0x99, 0), 2);
 
             matd_t *pose = homography_to_pose(det->H, fx, fy, cx, cy); // get camera pose from homography, Tag center is (0,0,0)
 
-            matd_t *intrinsic = matd_create(3,4); // intrinsic matrix
+            matd_t *intrinsic = matd_create(3, 4); // intrinsic matrix
             MATD_EL(intrinsic, 0, 0) = fx;
             MATD_EL(intrinsic, 0, 1) = 0;
             MATD_EL(intrinsic, 0, 2) = cx;
@@ -252,7 +346,7 @@ int main(int argc, char *argv[])
 
             matd_t *homo = matd_multiply(intrinsic, pose); // get 3x4 homography instead of the 3x3 in the library
 
-            matd_t *boundary_points = matd_create(4,4); // 4 boundary points for the box, tag is the bottom side
+            matd_t *boundary_points = matd_create(4, 4); // 4 boundary points for the box, tag is the bottom side
             MATD_EL(boundary_points, 0, 0) = -1;
             MATD_EL(boundary_points, 0, 1) = -1;
             MATD_EL(boundary_points, 0, 2) = 1;
@@ -270,36 +364,36 @@ int main(int argc, char *argv[])
             MATD_EL(boundary_points, 3, 2) = 1;
             MATD_EL(boundary_points, 3, 3) = 1;
 
-            matd_t *end_points = matd_multiply(homo,boundary_points); // transform the box into camera coordinates and connecting lines
-            line(frame, Point(MATD_EL(end_points,0,0)/MATD_EL(end_points,2,0), MATD_EL(end_points,1,0)/MATD_EL(end_points,2,0)),
-                     Point(MATD_EL(end_points,0,1)/MATD_EL(end_points,2,1), MATD_EL(end_points,1,1)/MATD_EL(end_points,2,1)),
-                     Scalar(0, 0xff, 0), 2);
-            line(frame, Point(MATD_EL(end_points,0,1)/MATD_EL(end_points,2,1), MATD_EL(end_points,1,1)/MATD_EL(end_points,2,1)),
-                     Point(MATD_EL(end_points,0,2)/MATD_EL(end_points,2,2), MATD_EL(end_points,1,2)/MATD_EL(end_points,2,2)),
-                     Scalar(0, 0xff, 0), 2);
-            line(frame, Point(MATD_EL(end_points,0,2)/MATD_EL(end_points,2,2), MATD_EL(end_points,1,2)/MATD_EL(end_points,2,2)),
-                     Point(MATD_EL(end_points,0,3)/MATD_EL(end_points,2,3), MATD_EL(end_points,1,3)/MATD_EL(end_points,2,3)),
-                     Scalar(0, 0xff, 0), 2);
-            line(frame, Point(MATD_EL(end_points,0,3)/MATD_EL(end_points,2,3), MATD_EL(end_points,1,3)/MATD_EL(end_points,2,3)),
-                     Point(MATD_EL(end_points,0,0)/MATD_EL(end_points,2,0), MATD_EL(end_points,1,0)/MATD_EL(end_points,2,0)),
-                     Scalar(0, 0xff, 0), 2);
+            matd_t *end_points = matd_multiply(homo, boundary_points); // transform the box into camera coordinates and connecting lines
+            line(frame, Point(MATD_EL(end_points, 0, 0) / MATD_EL(end_points, 2, 0), MATD_EL(end_points, 1, 0) / MATD_EL(end_points, 2, 0)),
+                    Point(MATD_EL(end_points, 0, 1) / MATD_EL(end_points, 2, 1), MATD_EL(end_points, 1, 1) / MATD_EL(end_points, 2, 1)),
+                    Scalar(0, 0xff, 0), 2);
+            line(frame, Point(MATD_EL(end_points, 0, 1) / MATD_EL(end_points, 2, 1), MATD_EL(end_points, 1, 1) / MATD_EL(end_points, 2, 1)),
+                    Point(MATD_EL(end_points, 0, 2) / MATD_EL(end_points, 2, 2), MATD_EL(end_points, 1, 2) / MATD_EL(end_points, 2, 2)),
+                    Scalar(0, 0xff, 0), 2);
+            line(frame, Point(MATD_EL(end_points, 0, 2) / MATD_EL(end_points, 2, 2), MATD_EL(end_points, 1, 2) / MATD_EL(end_points, 2, 2)),
+                    Point(MATD_EL(end_points, 0, 3) / MATD_EL(end_points, 2, 3), MATD_EL(end_points, 1, 3) / MATD_EL(end_points, 2, 3)),
+                    Scalar(0, 0xff, 0), 2);
+            line(frame, Point(MATD_EL(end_points, 0, 3) / MATD_EL(end_points, 2, 3), MATD_EL(end_points, 1, 3) / MATD_EL(end_points, 2, 3)),
+                    Point(MATD_EL(end_points, 0, 0) / MATD_EL(end_points, 2, 0), MATD_EL(end_points, 1, 0) / MATD_EL(end_points, 2, 0)),
+                    Scalar(0, 0xff, 0), 2);
             line(frame, Point(Point(det->p[0][0], det->p[0][1])),
-                     Point(MATD_EL(end_points,0,1)/MATD_EL(end_points,2,1), MATD_EL(end_points,1,1)/MATD_EL(end_points,2,1)),
-                     Scalar(0, 0xff, 0), 2);
+                    Point(MATD_EL(end_points, 0, 1) / MATD_EL(end_points, 2, 1), MATD_EL(end_points, 1, 1) / MATD_EL(end_points, 2, 1)),
+                    Scalar(0, 0xff, 0), 2);
             line(frame, Point(Point(det->p[1][0], det->p[1][1])),
-                     Point(MATD_EL(end_points,0,2)/MATD_EL(end_points,2,2), MATD_EL(end_points,1,2)/MATD_EL(end_points,2,2)),
-                     Scalar(0, 0xff, 0), 2);
+                    Point(MATD_EL(end_points, 0, 2) / MATD_EL(end_points, 2, 2), MATD_EL(end_points, 1, 2) / MATD_EL(end_points, 2, 2)),
+                    Scalar(0, 0xff, 0), 2);
             line(frame, Point(Point(det->p[2][0], det->p[2][1])),
-                     Point(MATD_EL(end_points,0,3)/MATD_EL(end_points,2,3), MATD_EL(end_points,1,3)/MATD_EL(end_points,2,3)),
-                     Scalar(0, 0xff, 0), 2);
+                    Point(MATD_EL(end_points, 0, 3) / MATD_EL(end_points, 2, 3), MATD_EL(end_points, 1, 3) / MATD_EL(end_points, 2, 3)),
+                    Scalar(0, 0xff, 0), 2);
             line(frame, Point(Point(det->p[3][0], det->p[3][1])),
-                     Point(MATD_EL(end_points,0,0)/MATD_EL(end_points,2,0), MATD_EL(end_points,1,0)/MATD_EL(end_points,2,0)),
-                     Scalar(0, 0xff, 0), 2);
+                    Point(MATD_EL(end_points, 0, 0) / MATD_EL(end_points, 2, 0), MATD_EL(end_points, 1, 0) / MATD_EL(end_points, 2, 0)),
+                    Scalar(0, 0xff, 0), 2);
 
-        //////////// Controls  ////////////
+            //////////// Controls  ////////////
             // get homogeneous transformation from tag to fotokite: inverse? of (camera) pose
             matd_t *g_ft_measured = pose; // http://answers.unity3d.com/storage/temp/12048-lefthandedtorighthanded.pdf
-            
+
             MATD_EL(g_ft_measured, 0, 2) = -MATD_EL(g_ft_measured, 0, 2); // change to conventional way, here comes the controls
             MATD_EL(g_ft_measured, 1, 2) = -MATD_EL(g_ft_measured, 1, 2);
             MATD_EL(g_ft_measured, 2, 0) = -MATD_EL(g_ft_measured, 2, 0);
@@ -309,7 +403,7 @@ int main(int argc, char *argv[])
             // get desired homogeneous transformation from tag to fotokite
             // based on the pose from putting the tag at a desired position and orientation in front of the camera
             // inverse the pose
-            matd_t *g_ft_desired = matd_create(4,4); 
+            matd_t *g_ft_desired = matd_create(4, 4);
             MATD_EL(g_ft_desired, 0, 0) = 0; // from the screen output
             MATD_EL(g_ft_desired, 0, 1) = 1;
             MATD_EL(g_ft_desired, 0, 2) = 0;
@@ -330,7 +424,7 @@ int main(int argc, char *argv[])
             // plot the desire tag position
             matd_t *homo_desired = matd_multiply(intrinsic, g_ft_desired); // get 3x4 homography instead of the 3x3 in the library
 
-            matd_t *boundary_points_desired = matd_create(4,4); // 4 boundary points for the box, tag is the bottom side
+            matd_t *boundary_points_desired = matd_create(4, 4); // 4 boundary points for the box, tag is the bottom side
             MATD_EL(boundary_points_desired, 0, 0) = -1;
             MATD_EL(boundary_points_desired, 0, 1) = -1;
             MATD_EL(boundary_points_desired, 0, 2) = 1;
@@ -348,19 +442,19 @@ int main(int argc, char *argv[])
             MATD_EL(boundary_points_desired, 3, 2) = 1;
             MATD_EL(boundary_points_desired, 3, 3) = 1;
 
-            matd_t *end_points_desired = matd_multiply(homo_desired,boundary_points_desired); // transform the box into camera coordinates and connecting lines
-            line(frame, Point(MATD_EL(end_points_desired,0,0)/MATD_EL(end_points_desired,2,0), MATD_EL(end_points_desired,1,0)/MATD_EL(end_points_desired,2,0)),
-                     Point(MATD_EL(end_points_desired,0,1)/MATD_EL(end_points_desired,2,1), MATD_EL(end_points_desired,1,1)/MATD_EL(end_points_desired,2,1)),
-                     Scalar(0, 0xff, 0), 2);
-            line(frame, Point(MATD_EL(end_points_desired,0,1)/MATD_EL(end_points_desired,2,1), MATD_EL(end_points_desired,1,1)/MATD_EL(end_points_desired,2,1)),
-                     Point(MATD_EL(end_points_desired,0,2)/MATD_EL(end_points_desired,2,2), MATD_EL(end_points_desired,1,2)/MATD_EL(end_points_desired,2,2)),
-                     Scalar(0, 0xff, 0), 2);
-            line(frame, Point(MATD_EL(end_points_desired,0,2)/MATD_EL(end_points_desired,2,2), MATD_EL(end_points_desired,1,2)/MATD_EL(end_points_desired,2,2)),
-                     Point(MATD_EL(end_points_desired,0,3)/MATD_EL(end_points_desired,2,3), MATD_EL(end_points_desired,1,3)/MATD_EL(end_points_desired,2,3)),
-                     Scalar(0, 0xff, 0), 2);
-            line(frame, Point(MATD_EL(end_points_desired,0,3)/MATD_EL(end_points_desired,2,3), MATD_EL(end_points_desired,1,3)/MATD_EL(end_points_desired,2,3)),
-                     Point(MATD_EL(end_points_desired,0,0)/MATD_EL(end_points_desired,2,0), MATD_EL(end_points_desired,1,0)/MATD_EL(end_points_desired,2,0)),
-                     Scalar(0, 0xff, 0), 2);
+            matd_t *end_points_desired = matd_multiply(homo_desired, boundary_points_desired); // transform the box into camera coordinates and connecting lines
+            line(frame, Point(MATD_EL(end_points_desired, 0, 0) / MATD_EL(end_points_desired, 2, 0), MATD_EL(end_points_desired, 1, 0) / MATD_EL(end_points_desired, 2, 0)),
+                    Point(MATD_EL(end_points_desired, 0, 1) / MATD_EL(end_points_desired, 2, 1), MATD_EL(end_points_desired, 1, 1) / MATD_EL(end_points_desired, 2, 1)),
+                    Scalar(0, 0xff, 0), 2);
+            line(frame, Point(MATD_EL(end_points_desired, 0, 1) / MATD_EL(end_points_desired, 2, 1), MATD_EL(end_points_desired, 1, 1) / MATD_EL(end_points_desired, 2, 1)),
+                    Point(MATD_EL(end_points_desired, 0, 2) / MATD_EL(end_points_desired, 2, 2), MATD_EL(end_points_desired, 1, 2) / MATD_EL(end_points_desired, 2, 2)),
+                    Scalar(0, 0xff, 0), 2);
+            line(frame, Point(MATD_EL(end_points_desired, 0, 2) / MATD_EL(end_points_desired, 2, 2), MATD_EL(end_points_desired, 1, 2) / MATD_EL(end_points_desired, 2, 2)),
+                    Point(MATD_EL(end_points_desired, 0, 3) / MATD_EL(end_points_desired, 2, 3), MATD_EL(end_points_desired, 1, 3) / MATD_EL(end_points_desired, 2, 3)),
+                    Scalar(0, 0xff, 0), 2);
+            line(frame, Point(MATD_EL(end_points_desired, 0, 3) / MATD_EL(end_points_desired, 2, 3), MATD_EL(end_points_desired, 1, 3) / MATD_EL(end_points_desired, 2, 3)),
+                    Point(MATD_EL(end_points_desired, 0, 0) / MATD_EL(end_points_desired, 2, 0), MATD_EL(end_points_desired, 1, 0) / MATD_EL(end_points_desired, 2, 0)),
+                    Scalar(0, 0xff, 0), 2);
 
 
             // done plotting, change g_ft_desired to right handed
@@ -373,145 +467,86 @@ int main(int argc, char *argv[])
             // inverse g_ft_desired
             matd_t *g_ft_desired_inv = matd_inverse(g_ft_desired);
 
-            matd_t *g_gf_measured = matd_create(4,4); //http://nghiaho.com/?page_id=846
-            MATD_EL(g_gf_measured, 0, 0) = cos(theta_z)*cos(theta_y);
-            MATD_EL(g_gf_measured, 0, 1) = cos(theta_z)*sin(theta_y)*sin(theta_x)-sin(theta_z)*cos(theta_x);
-            MATD_EL(g_gf_measured, 0, 2) = cos(theta_z)*sin(theta_y)*cos(theta_x)+sin(theta_z)*sin(theta_x);
-            MATD_EL(g_gf_measured, 0, 3) = x;
-            MATD_EL(g_gf_measured, 1, 0) = sin(theta_z)*cos(theta_y);
-            MATD_EL(g_gf_measured, 1, 1) = sin(theta_z)*sin(theta_y)*sin(theta_x)+cos(theta_z)*cos(theta_x);
-            MATD_EL(g_gf_measured, 1, 2) = sin(theta_z)*sin(theta_y)*cos(theta_x)-cos(theta_z)*sin(theta_x);
-            MATD_EL(g_gf_measured, 1, 3) = y;
-            MATD_EL(g_gf_measured, 2, 0) = -1*sin(theta_y);
-            MATD_EL(g_gf_measured, 2, 1) = cos(theta_y)*sin(theta_x);
-            MATD_EL(g_gf_measured, 2, 2) = cos(theta_y)*cos(theta_x);
-            MATD_EL(g_gf_measured, 2, 3) = z;
-            MATD_EL(g_gf_measured, 3, 0) = 0;
-            MATD_EL(g_gf_measured, 3, 1) = 0;
-            MATD_EL(g_gf_measured, 3, 2) = 0;
-            MATD_EL(g_gf_measured, 3, 3) = 1;
+            matd_t * g_gf_measured = get_homo_transform(x, y, z, theta_x, theta_y, theta_z);
             // that finishes compute g_gf_measured
 
             matd_t *temp = matd_multiply(g_gf_measured, g_ft_measured);
             matd_t *g_gf_controlled = matd_multiply(temp, g_ft_desired_inv);
             // rot2euler(g_gf_controlled);
 
-            double x_controlled = MATD_EL(g_gf_controlled, 0, 3);
-            double y_controlled = MATD_EL(g_gf_controlled, 1, 3);
-            double z_controlled = MATD_EL(g_gf_controlled, 2, 3);
-
-            // here solves the inverse kinematics 
-            double r32 = MATD_EL(g_gf_controlled, 2, 1);
-            double r33 = MATD_EL(g_gf_controlled, 2, 2);
-            double relTetherLength_controlled = sqrt(x_controlled*x_controlled+y_controlled*y_controlled+z_controlled*z_controlled);
-            double Elevation_controlled = asin(y_controlled/relTetherLength_controlled);
-            double relAzimuth_controlled = atan2(x_controlled, z_controlled)-1.57;  //see diagram 
-            if(abs(relAzimuth - relAzimuth_controlled)>3.14){
-            	if(relAzimuth < relAzimuth_controlled){
-                	relAzimuth_controlled = relAzimuth_controlled - 2*3.14;
-            	}
-            	else{ // relAzimuth >= relAzimuth_controlled
-            		relAzimuth_controlled = relAzimuth_controlled + 2*3.14;
-            	}
-            }
-            // http://nghiaho.com/?page_id=846
-            double yaw_controlled = atan2(-MATD_EL(g_gf_controlled, 2, 0),sqrt(r32*r32+r33*r33)); // theta_y
-            if(abs(yaw - yaw_controlled)>3.14){
-            	if(yaw < yaw_controlled){
-                	yaw_controlled = yaw_controlled - 2*3.14;
-                }
-                else{ // yaw >= yaw_controlled
-                	yaw_controlled = yaw_controlled + 2*3.14;
-                }
-            }
-            double GimbalPitch_controlled = atan2(MATD_EL(g_gf_controlled, 2, 1),MATD_EL(g_gf_controlled, 2, 2)); // theta_x
-            // double GimbalRoll_controlled = atan2(MATD_EL(g_gf_controlled, 1, 0),MATD_EL(g_gf_controlled, 0, 0)); // theta_z
-
+            double relTetherLength_controlled;
+            double Elevation_controlled;
+            double relAzimuth_controlled;
+            double yaw_controlled;
+            double GimbalPitch_controlled;
+            double GimbalRoll_controlled;
+            get_fotokite_controls(relAzimuth, yaw, g_gf_controlled, relTetherLength_controlled, Elevation_controlled, relAzimuth_controlled, yaw_controlled, GimbalPitch_controlled, GimbalRoll_controlled);
+            
             // here goes the actual commands to FK
             // tether control
             double tether_tolerance = 2; // tag unit
-            if (relTetherLength_controlled < relTetherLength - tether_tolerance){
-            	fotokite->posL(-5);// decrease tether length
+            if (relTetherLength_controlled < relTetherLength - tether_tolerance) {
+                fotokite->posL(-5); // decrease tether length
                 // cout<<"tether: "<<"-10"<<"\t";
-            }
-            else if (relTetherLength_controlled > relTetherLength + tether_tolerance){
-            	fotokite->posL(+5);// increase tether length
+            } else if (relTetherLength_controlled > relTetherLength + tether_tolerance) {
+                fotokite->posL(+5); // increase tether length
                 // cout<<"tether: "<<"+10"<<"\t";
-            }
-            else {
+            } else {
                 fotokite->posL(0);
                 // cout<<"tether: "<<"  "<<"\t";
             }
 
             // elevation control
             double Elevation_tolerance = 0.2; // need to see the actual value
-            if (Elevation_controlled < Elevation - Elevation_tolerance){
-            	fotokite->posV(-0.1);// decrease elevation
+            if (Elevation_controlled < Elevation - Elevation_tolerance) {
+                fotokite->posV(-0.1); // decrease elevation
                 // cout<<"elevation: "<<"-0.1"<<"\t";
-            }
-            else if (Elevation_controlled > Elevation + Elevation_tolerance){
-            	fotokite->posV(+0.1);// increase elevation
+            } else if (Elevation_controlled > Elevation + Elevation_tolerance) {
+                fotokite->posV(+0.1); // increase elevation
                 // cout<<"elevation: "<<"+0.1"<<"\t";
-            }
-            else {
+            } else {
                 fotokite->posV(0);
                 // cout<<"elevation: "<<"  "<<"\t";
             }
 
             // azimuth control
             double relAzimuth_tolerance = 0.2; // need to see the actual value
-            if (relAzimuth_controlled < relAzimuth - relAzimuth_tolerance){
-            	fotokite->posH(-0.1);// decrease relAzimuth
+            if (relAzimuth_controlled < relAzimuth - relAzimuth_tolerance) {
+                fotokite->posH(-0.1); // decrease relAzimuth
                 // cout<<"azimuth: "<<"-0.1"<<"\t";
-            }
-            else if (relAzimuth_controlled > relAzimuth + relAzimuth_tolerance){
-            	fotokite->posH(+0.1);// increase relAzimuth
+            } else if (relAzimuth_controlled > relAzimuth + relAzimuth_tolerance) {
+                fotokite->posH(+0.1); // increase relAzimuth
                 // cout<<"azimuth: "<<"+0.1"<<"\t";
-            }
-            else {
+            } else {
                 fotokite->posH(0);
                 // cout<<"azimuth: "<<"  "<<"\t";
             }
 
             // camera yaw control
-            double yaw_tolerance = 0.2;
-            if (yaw_controlled < yaw - yaw_tolerance){
-                fotokite->yaw(-0.1);// decrease yaw
-                // cout<<"yaw:    "<<"-0.1"<<"\t";
-            }
-            else if (yaw_controlled > yaw + yaw_tolerance){
-                fotokite->yaw(+0.2);// increase yaw
-                // cout<<"yaw:  "<<"+0.1"<<"\t";
-            }
-            else {
-                fotokite->yaw(0);
-                // cout<<"yaw   "<<"  "<<"\t";
-            }
+            yawControl(fotokite, yaw, yaw_controlled, 0.2);
 
             // camera pitch and roll control (first estimate, then update)
-            duration = (clock()-start_time); // ms to s 
-            double duraton_in_s = float(duration)/CLOCKS_PER_SEC;
+            duration = (clock() - start_time); // ms to s 
+            double duraton_in_s = float(duration) / CLOCKS_PER_SEC;
             // cout<<duration<<endl;
             GimbalPitch = GimbalPitch + pitchRate * duraton_in_s;
             // cout<<"pitchRate: "<<pitchRate<<endl;
             // cout<<"duration_in_s: "<<duraton_in_s<<endl;
             // cout<<"GimbalPitch: "<<GimbalPitch<<endl;
-            GimbalRoll = GimbalRoll + rollRate * duraton_in_s; 
+            GimbalRoll = GimbalRoll + rollRate * duraton_in_s;
 
             // update GimbalPitch here 
             double GimbalPitch_tolerance = 0.2;
-            if (GimbalPitch_controlled < GimbalPitch - GimbalPitch_tolerance){
-                pitchRate = -0.2; 
-                fotokite->gimbalPitch(pitchRate);// decrease pitch
+            if (GimbalPitch_controlled < GimbalPitch - GimbalPitch_tolerance) {
+                pitchRate = -0.2;
+                fotokite->gimbalPitch(pitchRate); // decrease pitch
                 // cout<<"pitch: "<<"-0.1"<<"\t";
-            }
-            else if (GimbalPitch_controlled > GimbalPitch + GimbalPitch_tolerance){
-                pitchRate = 0.2; 
-                fotokite->gimbalPitch(pitchRate);// increase pitch
+            } else if (GimbalPitch_controlled > GimbalPitch + GimbalPitch_tolerance) {
+                pitchRate = 0.2;
+                fotokite->gimbalPitch(pitchRate); // increase pitch
                 // cout<<"pitch: "<<"+0.1"<<"\t";
-            }
-            else {
-                pitchRate = 0; 
+            } else {
+                pitchRate = 0;
                 fotokite->gimbalPitch(pitchRate);
                 // cout<<"pitch: "<<"  "<<"\t";
             }
@@ -531,32 +566,62 @@ int main(int argc, char *argv[])
             // }
             // cout<<"x_s: "<<x<<", y_s: "<<y<<", z_s: "<<z<<endl;
             // cout<<"x_c: "<<x_controlled<<", y_c: "<<y_controlled<<", z_c: "<<z_controlled<<endl;
-            cout<<"Tether_s: "<<relTetherLength<<", Elevation_s: "<<Elevation/3.1415926*180<<", Azimuth_s: "<<relAzimuth/3.1415926*180<<", Yaw_s: "<<yaw/3.1415926*180<<", Pitch_s: "<<GimbalPitch/3.1415926*180<<endl;
-            cout<<"Tether_c: "<<relTetherLength_controlled<<", Elevation_c: "<<Elevation_controlled/3.1415926*180<<", Azimuth_c: "<<relAzimuth_controlled/3.1415926*180<<", Yaw_c: "<<yaw_controlled/3.1415926*180<<", Pitch_c: "<<GimbalPitch_controlled/3.1415926*180<<endl;
+            cout << "Tether_s: " << relTetherLength << ", Elevation_s: " << Elevation / PI * 180 << ", Azimuth_s: " << relAzimuth / PI * 180 << ", Yaw_s: " << yaw / PI * 180 << ", Pitch_s: " << GimbalPitch / PI * 180 << endl;
+            cout << "Tether_c: " << relTetherLength_controlled << ", Elevation_c: " << Elevation_controlled / PI * 180 << ", Azimuth_c: " << relAzimuth_controlled / PI * 180 << ", Yaw_c: " << yaw_controlled / PI * 180 << ", Pitch_c: " << GimbalPitch_controlled / PI * 180 << endl;
             start_time = clock();
-            DataLog::out<<relTetherLength<<"\t"<<Elevation/3.1415926*180<<"\t"<<relAzimuth/3.1415926*180<<"\t"<<yaw/3.1415926*180<<"\t"<<GimbalPitch/3.1415926*180<<"\t"<<endl;
+            DataLog::out << relTetherLength << "\t" << Elevation / PI * 180 << "\t" << relAzimuth / PI * 180 << "\t" << yaw / PI * 180 << "\t" << GimbalPitch / PI * 180 << "\t" << endl;
 
         }
-        if(zarray_size(detections)==0){
-            // cout<<"x_s: "<<x<<", y_s: "<<y<<", z_s: "<<z<<endl;
-            cout<<"Tether_s: "<<relTetherLength<<", Elevation_s: "<<Elevation/3.1415926*180<<", Azimuth_s: "<<relAzimuth/3.1415926*180<<", Yaw_s: "<<yaw/3.1415926*180<<", Pitch_s: "<<GimbalPitch/3.1415926*180<<endl;
 
-            duration = (clock()-start_time); // ms to s 
-            double duraton_in_s = float(duration)/CLOCKS_PER_SEC;
+#ifdef FEATURES
+
+        // Initialize euler angles and translation matrix         
+        Vec3f eulerAngles;
+        Mat translationMatrix;
+
+        // Find current pose
+        visualPoseEstimator->findPose(frame, eulerAngles, translationMatrix);
+
+        // Print pose
+        visualPoseEstimator->printPose();
+
+        // Yaw
+        yaw = degreeToRadians(eulerAngles[1]);
+        double yaw_controlled = 0;
+        yawControl(fotokite, yaw, yaw_controlled, 0.08);
+
+        // Pitch
+        //        pitch = degreeToRadians(eulerAngles[0]);
+        //        double pitch_controlled = 0;
+
+        // Translation
+
+        matd_t * g_gf_measured = get_homo_transform(x, y, z, theta_x, theta_y, theta_z);
+        matd_t * g_fc = get_homo_transform(translationMatrix.at<double>(0, 0), translationMatrix.at<double>(1, 0), -translationMatrix.at<double>(2, 0), 0, 0, 0);
+        matd_t * g_gc = matd_multiply(g_gf_measured, g_fc);
+
+#else
+        if (zarray_size(detections) == 0) {
+            // cout<<"x_s: "<<x<<", y_s: "<<y<<", z_s: "<<z<<endl;
+            cout << "Tether_s: " << relTetherLength << ", Elevation_s: " << Elevation / PI * 180 << ", Azimuth_s: " << relAzimuth / PI * 180 << ", Yaw_s: " << yaw / PI * 180 << ", Pitch_s: " << GimbalPitch / PI * 180 << endl;
+
+            duration = (clock() - start_time); // ms to s 
+            double duraton_in_s = float(duration) / CLOCKS_PER_SEC;
             // cout<<duration<<endl;
             GimbalPitch = GimbalPitch + pitchRate * duraton_in_s;
-            GimbalRoll = GimbalRoll + rollRate * duraton_in_s; 
+            GimbalRoll = GimbalRoll + rollRate * duraton_in_s;
 
             fotokite->posL(0);
             fotokite->posV(0);
             fotokite->posH(0);
             fotokite->yaw(0);
             fotokite->gimbalPitch(0);
-            pitchRate = 0; 
+            pitchRate = 0;
             start_time = clock();
 
         }
-        
+#endif
+
         zarray_destroy(detections);
 
         imshow("Tag Detections", frame);
