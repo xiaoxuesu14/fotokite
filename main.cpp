@@ -54,7 +54,7 @@ using namespace std;
 using namespace cv;
 
 #define PI 3.14159265
-#//define FEATURES
+//#define FEATURES
 
 void rot2euler(matd_t *R) // http://nghiaho.com/?page_id=846
 {
@@ -80,8 +80,8 @@ void yawControl(Fotokite*& fotokite, double yaw, double yaw_controlled, double y
     double p_gain = 0.5;
     if (abs(yaw_controlled - yaw) > yaw_tolerance) {
         double yawRate = p_gain * (yaw_controlled - yaw);
-                fotokite->yaw(yawRate);
-//        fotokite->yaw(sgn(yawRate) * 0.1);
+        fotokite->yaw(yawRate);
+        //        fotokite->yaw(sgn(yawRate) * 0.1);
         // cout<<"yaw: "<<yawRate<<"\t";
     } else {
         fotokite->yaw(0);
@@ -111,11 +111,11 @@ matd_t * get_homo_transform(double x, double y, double z, double theta_x, double
     return g_gf_measured;
 }
 
-void get_fotokite_controls(double relAzimuth, double yaw, matd_t *g_gf_controlled, double& relTetherLength_controlled, double& Elevation_controlled, double& relAzimuth_controlled, double& yaw_controlled, double& GimbalPitch_controlled, double& GimbalRoll_controlled) {
+void get_fotokite_controls(double relAzimuth, double yaw, matd_t *g_gf_controlled, double& relTetherLength_controlled, double& Elevation_controlled, double& relAzimuth_controlled, double& yaw_controlled, double& GimbalPitch_controlled, double& GimbalRoll_controlled, double& x_controlled, double& y_controlled, double& z_controlled) {
 
-    double x_controlled = MATD_EL(g_gf_controlled, 0, 3);
-    double y_controlled = MATD_EL(g_gf_controlled, 1, 3);
-    double z_controlled = MATD_EL(g_gf_controlled, 2, 3);
+    x_controlled = MATD_EL(g_gf_controlled, 0, 3);
+    y_controlled = MATD_EL(g_gf_controlled, 1, 3);
+    z_controlled = MATD_EL(g_gf_controlled, 2, 3);
 
     // here solves the inverse kinematics 
     double r32 = MATD_EL(g_gf_controlled, 2, 1);
@@ -160,8 +160,8 @@ void elevationControl(Fotokite*& fotokite, double Elevation, double Elevation_co
     double p_gain = 0.25; // 0.4
     if (abs(Elevation_controlled - Elevation) > Elevation_tolerance) {
         double elevRate = p_gain * (Elevation_controlled - Elevation);
-                fotokite->posV(elevRate);
-//        fotokite->posV(sgn(elevRate) * 0.1);
+        fotokite->posV(elevRate);
+        //        fotokite->posV(sgn(elevRate) * 0.1);
         // cout<<"elevation: "<<elevRate<<"\t";
     } else {
         fotokite->posV(0);
@@ -173,8 +173,8 @@ void azimuthControl(Fotokite*& fotokite, double relAzimuth, double relAzimuth_co
     double p_gain = 0.2; // 0.5
     if (abs(relAzimuth_controlled - relAzimuth) > relAzimuth_tolerance) {
         double azimuthRate = p_gain * (relAzimuth_controlled - relAzimuth);
-                fotokite->posH(azimuthRate);
-//        fotokite->posH(sgn(azimuthRate) * 0.1);
+        fotokite->posH(azimuthRate);
+        //        fotokite->posH(sgn(azimuthRate) * 0.1);
         // cout<<"azimuth: "<<azimuthRate<<"\t";
     } else {
         fotokite->posH(0);
@@ -393,9 +393,9 @@ int main(int argc, char *argv[]) {
         //        cout << sqrt(pow(translationMatrix.at<double>(0,0), 2) + pow(translationMatrix.at<double>(1,0), 2) + pow(translationMatrix.at<double>(2,0), 2)) << endl;
 
         // Yaw
-        yaw = degreeToRadians(eulerAngles[1]);
-        double yaw_controlled = 0;
-        yawControl(fotokite, yaw, yaw_controlled, 0.08);
+        double yaw_features = degreeToRadians(eulerAngles[1]);
+        double yaw_features_controlled = 0;
+        yawControl(fotokite, yaw_features, yaw_features_controlled, 0.08);
 
         // Translation
 
@@ -412,10 +412,14 @@ int main(int argc, char *argv[]) {
         double relTetherLength_controlled;
         double Elevation_controlled;
         double relAzimuth_controlled;
-        double GimbalPitch_controlled;
-        double GimbalRoll_controlled;
+        double yaw_controlled; // Not used (yaw_features_controlled is used)
+        double GimbalPitch_controlled; // Not used
+        double GimbalRoll_controlled; // Not used
+        double x_controlled;
+        double y_controlled;
+        double z_controlled;
 
-        get_fotokite_controls(relAzimuth, yaw, g_gc, relTetherLength_controlled, Elevation_controlled, relAzimuth_controlled, yaw_controlled, GimbalPitch_controlled, GimbalRoll_controlled);
+        get_fotokite_controls(relAzimuth, yaw_features, g_gc, relTetherLength_controlled, Elevation_controlled, relAzimuth_controlled, yaw_controlled, GimbalPitch_controlled, GimbalRoll_controlled, x_controlled, y_controlled, z_controlled);
 
         // Tether
         double tether_tolerance = 2; // tag unit
@@ -428,6 +432,63 @@ int main(int argc, char *argv[]) {
         // Azimuth
         double relAzimuth_tolerance = 0.2; // need to see the actual value
         azimuthControl(fotokite, relAzimuth, relAzimuth_controlled, relAzimuth_tolerance);
+
+        // Log
+        visualPoseEstimator->logFile << yaw;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << yaw_features;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << relTetherLength;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << Elevation;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << relAzimuth;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << x;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << y;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << z;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << theta_x;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << theta_y;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << theta_z;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << relTetherLength_controlled;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << Elevation_controlled;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << relAzimuth_controlled;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << x_controlled;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << y_controlled;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << z_controlled;
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << fotokite->getBaroAlt();
+        visualPoseEstimator->logFile << " ";
+
+        visualPoseEstimator->logFile << "\n";
 
 #else
 
@@ -611,7 +672,11 @@ int main(int argc, char *argv[]) {
             double yaw_controlled;
             double GimbalPitch_controlled;
             double GimbalRoll_controlled;
-            get_fotokite_controls(relAzimuth, yaw, g_gf_controlled, relTetherLength_controlled, Elevation_controlled, relAzimuth_controlled, yaw_controlled, GimbalPitch_controlled, GimbalRoll_controlled);
+            double x_controlled;
+            double y_controlled;
+            double z_controlled;
+            
+            get_fotokite_controls(relAzimuth, yaw, g_gf_controlled, relTetherLength_controlled, Elevation_controlled, relAzimuth_controlled, yaw_controlled, GimbalPitch_controlled, GimbalRoll_controlled, x_controlled, y_controlled, z_controlled);
 
             // here goes the actual commands to FK
             // tether control

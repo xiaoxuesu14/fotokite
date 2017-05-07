@@ -33,6 +33,8 @@ public:
     void setDesiredPose(Mat);
     void findPose(Mat, Vec3f&, Mat&);
     void printPose();
+    
+    ofstream logFile;
 
 private:
 
@@ -137,7 +139,6 @@ private:
     bool isAngleSmall(Vec3f);
     
     // Log
-    ofstream logFile;
     string getCurrentTime();
     void log();
     

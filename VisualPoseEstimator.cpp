@@ -495,7 +495,7 @@ void VisualPoseEstimator::log() {
     logFile << angleOutlierRejectCounter;
     logFile << " ";
 
-    logFile << "\n";
+//    logFile << "\n";
 }
 
 /**
