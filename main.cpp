@@ -89,14 +89,25 @@ int main(int argc, char *argv[])
     // VideoCapture cap("rtsp://192.168.2.202/z3-1.mp4");
     VideoCapture cap(0);
   
-    double fx = 1.002560636338565e+03; // Mac webcam
-    double fy = 1.003227769508857e+03;
-    double cx = 6.360588037637018e+02;
-    double cy = 3.490447569094387e+02;
-    // double fx = 8.846756775004567e+02; // FK GoPro
+//    double fx = 1.002560636338565e+03; // Mac webcam
+//    double fy = 1.003227769508857e+03;
+//    double cx = 6.360588037637018e+02;
+//    double cy = 3.490447569094387e+02;
+    // double fx = 8.846756775004567e+02; // FK GoPro original
     // double fy = 8.907163863307561e+02;
     // double cx = 9.527944439036946e+02;
     // double cy = 5.362323663691869e+02;
+//     double fx = 8.6258481434823898e+02; // FK GoPro lab
+//     double fy = 8.6258481434823898e+02;
+//     double cx = 960;
+//     double cy = 540;
+     double fx = 3.9275342820077321e+02; // FK GoPro lab resized
+     double fy = 3.9275342820077321e+02;
+     double cx = 400;
+     double cy = 240;
+     
+     Mat distortionCoefficients = (Mat_<double>(1, 5) << -2.9582896443544004e-01, 1.2593415853281231e-01, 0, 0, -2.5630954575459493e-02);
+     
     if (!cap.isOpened()) {
         cerr << "Couldn't open video capture device" << endl;
         return -1;
@@ -150,6 +161,7 @@ int main(int argc, char *argv[])
     while (waitKey(30) != 27) {
         //////////// Visual processing ////////////
         cap >> frame;
+        resize(frame, frame, Size(800, 480)); // resize the frame
         cvtColor(frame, gray, COLOR_BGR2GRAY);
         // Make an image_u8_t header for the Mat data
         image_u8_t im = { .width = gray.cols,
@@ -396,20 +408,20 @@ int main(int argc, char *argv[])
             double relAzimuth_controlled = atan2(x_controlled, z_controlled)-1.57;  //see diagram 
             if(abs(relAzimuth - relAzimuth_controlled)>3.14){
             	if(relAzimuth < relAzimuth_controlled){
-                	relAzimuth_controlled = relAzimuth_controlled - 3.14;
+                	relAzimuth_controlled = relAzimuth_controlled - 2*3.14;
             	}
             	else{ // relAzimuth >= relAzimuth_controlled
-            		relAzimuth_controlled = relAzimuth_controlled + 3.14;
+            		relAzimuth_controlled = relAzimuth_controlled + 2*3.14;
             	}
             }
             // http://nghiaho.com/?page_id=846
             double yaw_controlled = atan2(-MATD_EL(g_gf_controlled, 2, 0),sqrt(r32*r32+r33*r33)); // theta_y
             if(abs(yaw - yaw_controlled)>3.14){
             	if(yaw < yaw_controlled){
-                	yaw_controlled = yaw_controlled - 3.14;
+                	yaw_controlled = yaw_controlled - 2*3.14;
                 }
                 else{ // yaw >= yaw_controlled
-                	yaw_controlled = yaw_controlled + 3.14;
+                	yaw_controlled = yaw_controlled + 2*3.14;
                 }
             }
             double GimbalPitch_controlled = atan2(MATD_EL(g_gf_controlled, 2, 1),MATD_EL(g_gf_controlled, 2, 2)); // theta_x
@@ -489,12 +501,12 @@ int main(int argc, char *argv[])
             // update GimbalPitch here 
             double GimbalPitch_tolerance = 0.2;
             if (GimbalPitch_controlled < GimbalPitch - GimbalPitch_tolerance){
-                pitchRate = 0; 
+                pitchRate = -0.2; 
                 fotokite->gimbalPitch(pitchRate);// decrease pitch
                 // cout<<"pitch: "<<"-0.1"<<"\t";
             }
             else if (GimbalPitch_controlled > GimbalPitch + GimbalPitch_tolerance){
-                pitchRate = 0; 
+                pitchRate = 0.2; 
                 fotokite->gimbalPitch(pitchRate);// increase pitch
                 // cout<<"pitch: "<<"+0.1"<<"\t";
             }
