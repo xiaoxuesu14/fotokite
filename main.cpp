@@ -54,7 +54,7 @@ using namespace std;
 using namespace cv;
 
 #define PI 3.14159265
-//#define FEATURES
+#define FEATURES
 
 void rot2euler(matd_t *R) // http://nghiaho.com/?page_id=846
 {
