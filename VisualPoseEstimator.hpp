@@ -47,7 +47,7 @@ private:
     const int SURFMinHessian = 400;
 
     // Shi-Tomasi parameters
-    const int ShiTomasiMaxCorners = 2000;
+    const int ShiTomasiMaxCorners = 3000;
     const double ShiTomasiQualityLevel = 0.01;
     const double ShiTomasiMinDistance = 2;
     const int ShiTomasiBlockSize = 3;

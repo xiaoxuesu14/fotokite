@@ -75,7 +75,7 @@ private:
     
     void sendCommand(string);
     
-    void checkInputValues(double, double);
+    double correctInputValues(double, double);
     
 };
 

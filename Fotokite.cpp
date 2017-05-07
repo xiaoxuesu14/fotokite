@@ -196,11 +196,15 @@ unsigned int Fotokite::getFlags() {
  * @param value
  * @param limit
  */
-void Fotokite::checkInputValues(double value, double limit) {
+double Fotokite::correctInputValues(double value, double limit) {
 
     // Check if the values are legal
-    if (abs(value) > limit) {
-        throw "Command value exceeds legal range.";
+    if (value > limit) {
+        return limit;
+    } else if (value < -limit) {
+        return -limit;
+    } else {
+        return value;
     }
 
 }
@@ -225,8 +229,8 @@ void Fotokite::sendCommand(string command) {
 void Fotokite::gimbal(double pitchRate, double rollRate) {
 
     // Check if the values are legal
-    checkInputValues(pitchRate, 0.3);
-    checkInputValues(rollRate, 0.3);
+    pitchRate = correctInputValues(pitchRate, 0.3);
+    rollRate = correctInputValues(rollRate, 0.3);
 
     // Send command
     sendCommand("Gimbal " + to_string(pitchRate) + "," + to_string(rollRate));
@@ -242,7 +246,7 @@ void Fotokite::gimbal(double pitchRate, double rollRate) {
 void Fotokite::gimbalRoll(double rollRate) {
 
     // Check if the values are legal
-    checkInputValues(rollRate, 0.3);
+    rollRate = correctInputValues(rollRate, 0.3);
 
     // Send command
     sendCommand("GimbalRoll " + to_string(rollRate));
@@ -258,7 +262,7 @@ void Fotokite::gimbalRoll(double rollRate) {
 void Fotokite::gimbalPitch(double pitchRate) {
 
     // Check if the values are legal
-    checkInputValues(pitchRate, 0.3);
+    pitchRate = correctInputValues(pitchRate, 0.3);
 
     // Send command
     sendCommand("GimbalPitch " + to_string(pitchRate));
@@ -275,8 +279,8 @@ void Fotokite::gimbalPitch(double pitchRate) {
 void Fotokite::pos(double elevRate, double azimuthRate, double lengthDelta) {
 
     // Check if the values are legal
-    checkInputValues(elevRate, 0.25);
-    checkInputValues(azimuthRate, 0.2);
+    elevRate = correctInputValues(elevRate, 0.25);
+    azimuthRate = correctInputValues(azimuthRate, 0.2);
     
     // Send command
     sendCommand("Pos " + to_string(elevRate) + "," + to_string(azimuthRate) + "," + to_string(lengthDelta));
@@ -291,7 +295,7 @@ void Fotokite::pos(double elevRate, double azimuthRate, double lengthDelta) {
 void Fotokite::posV(double elevRate) {
     
     // Check if the values are legal
-    checkInputValues(elevRate, 0.25);
+    elevRate = correctInputValues(elevRate, 0.25);
     
     // Send command
     sendCommand("PosV " + to_string(elevRate));
@@ -306,7 +310,7 @@ void Fotokite::posV(double elevRate) {
 void Fotokite::posH(double azimuthRate) {
 
     // Check if the values are legal
-    checkInputValues(azimuthRate, 0.2);
+    azimuthRate = correctInputValues(azimuthRate, 0.2);
     
     // Send command
     sendCommand("PosH " + to_string(azimuthRate));
@@ -321,7 +325,7 @@ void Fotokite::posH(double azimuthRate) {
 void Fotokite::posL(double lengthDelta) {
 
     // Check if the values are legal
-    checkInputValues(lengthDelta, numeric_limits<float>::max());
+    lengthDelta = correctInputValues(lengthDelta, numeric_limits<float>::max());
     
     // Send command
     sendCommand("PosL " + to_string(lengthDelta));
@@ -336,7 +340,7 @@ void Fotokite::posL(double lengthDelta) {
 void Fotokite::yaw(double yawRate) {
     
     // Check if the values are legal
-    checkInputValues(yawRate, 0.4);
+    yawRate = correctInputValues(yawRate, 0.4);
     
     // Send command
     sendCommand("Yaw " + to_string(yawRate));
