@@ -143,13 +143,24 @@ void get_fotokite_controls(double relAzimuth, double yaw, matd_t *g_gf_controlle
     GimbalRoll_controlled = atan2(MATD_EL(g_gf_controlled, 1, 0), MATD_EL(g_gf_controlled, 0, 0)); // theta_z
 }
 
+void get_6dof(matd_t *g, double& x, double& y, double& z, double& theta_x, double& theta_y, double& theta_z){
+    x = MATD_EL(g, 0, 3);
+    y = MATD_EL(g, 1, 3);
+    z = MATD_EL(g, 2, 3);
+    double r32 = MATD_EL(g, 2, 1);
+    double r33 = MATD_EL(g, 2, 2);
+    theta_y = atan2(-MATD_EL(g, 2, 0), sqrt(r32 * r32 + r33 * r33)); // theta_y
+    theta_x = atan2(MATD_EL(g, 2, 1), MATD_EL(g, 2, 2)); // theta_x
+    theta_z = atan2(MATD_EL(g, 1, 0), MATD_EL(g, 0, 0)); // theta_z
+}
+
 void tetherControl(Fotokite*& fotokite, double relTetherLength, double relTetherLength_controlled, double tether_tolerance) {
     if (relTetherLength_controlled < relTetherLength - tether_tolerance) {
         fotokite->posL(-5); // decrease tether length
-        cout << "tether: " << "-5" << endl;
+//        cout << "tether: " << "-5" << endl;
     } else if (relTetherLength_controlled > relTetherLength + tether_tolerance) {
         fotokite->posL(+5); // increase tether length
-        cout << "tether: " << "+5" << endl;
+//        cout << "tether: " << "+5" << endl;
     } else {
         fotokite->posL(0);
         //         cout<<"tether: "<<"  "<<"\t";
@@ -662,8 +673,16 @@ int main(int argc, char *argv[]) {
             matd_t * g_gf_measured = get_homo_transform(x, y, z, theta_x, theta_y, theta_z);
             // that finishes compute g_gf_measured
 
-            matd_t *temp = matd_multiply(g_gf_measured, g_ft_measured);
-            matd_t *g_gf_controlled = matd_multiply(temp, g_ft_desired_inv);
+            matd_t *g_gt_measured = matd_multiply(g_gf_measured, g_ft_measured);
+            matd_t *g_gf_controlled = matd_multiply(g_gt_measured, g_ft_desired_inv);      
+            
+            double x_tag;
+            double y_tag;
+            double z_tag;
+            double theta_x_tag;
+            double theta_y_tag;
+            double theta_z_tag;
+            get_6dof(g_gt_measured, x_tag, y_tag, z_tag, theta_x_tag, theta_y_tag, theta_z_tag);
             // rot2euler(g_gf_controlled);
 
             double relTetherLength_controlled;
@@ -718,8 +737,11 @@ int main(int argc, char *argv[]) {
             cout << "Tether_s: " << relTetherLength << ", Elevation_s: " << Elevation / PI * 180 << ", Azimuth_s: " << relAzimuth / PI * 180 << ", Yaw_s: " << yaw / PI * 180 << ", Pitch_s: " << GimbalPitch / PI * 180 << endl;
             cout << "Tether_c: " << relTetherLength_controlled << ", Elevation_c: " << Elevation_controlled / PI * 180 << ", Azimuth_c: " << relAzimuth_controlled / PI * 180 << ", Yaw_c: " << yaw_controlled / PI * 180 << ", Pitch_c: " << GimbalPitch_controlled / PI * 180 << endl;
             start_time = clock();
-            DataLog::out << relTetherLength << "\t" << Elevation / PI * 180 << "\t" << relAzimuth / PI * 180 << "\t" << yaw / PI * 180 << "\t" << GimbalPitch / PI * 180 << "\t" << endl;
-
+            DataLog::out << x << " " << y << " " << z << " " << yaw << " " << GimbalPitch << " " << GimbalRoll << " " ;
+            DataLog::out << x_controlled << " " << y_controlled << " " << z_controlled << " " << yaw_controlled << " " << GimbalPitch_controlled << " " << GimbalRoll_controlled << " " ;
+            DataLog::out << x_tag << " " << y_tag << " " << z_tag << " " << theta_x_tag << " " << theta_y_tag << " " << theta_z_tag + PI/2<< " " ;
+            DataLog::out << relTetherLength << " " << Elevation << " " << relAzimuth << " " ; 
+            DataLog::out << relTetherLength_controlled << " " << Elevation_controlled << " " << relAzimuth_controlled << endl;
         }
 
         if (zarray_size(detections) == 0) {

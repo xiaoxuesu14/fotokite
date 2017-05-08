@@ -86,8 +86,6 @@
         </df>
         <df name="Fotokite.dir">
         </df>
-        <df name="Progress">
-        </df>
         <in>feature_tests.c</in>
         <in>feature_tests.cxx</in>
       </df>
