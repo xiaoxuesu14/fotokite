@@ -132,13 +132,13 @@ void get_fotokite_controls(double relAzimuth, double yaw, matd_t *g_gf_controlle
     }
     // http://nghiaho.com/?page_id=846
     yaw_controlled = atan2(-MATD_EL(g_gf_controlled, 2, 0), sqrt(r32 * r32 + r33 * r33)); // theta_y
-//    if (abs(yaw - yaw_controlled) > PI) {
-//        if (yaw < yaw_controlled) {
-//            yaw_controlled = yaw_controlled - 2 * PI;
-//        } else { // yaw >= yaw_controlled
-//            yaw_controlled = yaw_controlled + 2 * PI;
-//        }
-//    }
+    if (abs(yaw - yaw_controlled) > PI) {
+        if (yaw < yaw_controlled) {
+            yaw_controlled = yaw_controlled - 2 * PI;
+        } else { // yaw >= yaw_controlled
+            yaw_controlled = yaw_controlled + 2 * PI;
+        }
+    }
     GimbalPitch_controlled = atan2(MATD_EL(g_gf_controlled, 2, 1), MATD_EL(g_gf_controlled, 2, 2)); // theta_x
     GimbalRoll_controlled = atan2(MATD_EL(g_gf_controlled, 1, 0), MATD_EL(g_gf_controlled, 0, 0)); // theta_z
 }
