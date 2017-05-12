@@ -132,13 +132,13 @@ void get_fotokite_controls(double relAzimuth, double yaw, matd_t *g_gf_controlle
     }
     // http://nghiaho.com/?page_id=846
     yaw_controlled = atan2(-MATD_EL(g_gf_controlled, 2, 0), sqrt(r32 * r32 + r33 * r33)); // theta_y
-    if (abs(yaw - yaw_controlled) > PI) {
-        if (yaw < yaw_controlled) {
-            yaw_controlled = yaw_controlled - 2 * PI;
-        } else { // yaw >= yaw_controlled
-            yaw_controlled = yaw_controlled + 2 * PI;
-        }
-    }
+//    if (abs(yaw - yaw_controlled) > PI) {
+//        if (yaw < yaw_controlled) {
+//            yaw_controlled = yaw_controlled - 2 * PI;
+//        } else { // yaw >= yaw_controlled
+//            yaw_controlled = yaw_controlled + 2 * PI;
+//        }
+//    }
     GimbalPitch_controlled = atan2(MATD_EL(g_gf_controlled, 2, 1), MATD_EL(g_gf_controlled, 2, 2)); // theta_x
     GimbalRoll_controlled = atan2(MATD_EL(g_gf_controlled, 1, 0), MATD_EL(g_gf_controlled, 0, 0)); // theta_z
 }
@@ -196,10 +196,12 @@ void azimuthControl(Fotokite*& fotokite, double relAzimuth, double relAzimuth_co
 void pitchControl(Fotokite*& fotokite, double GimbalPitch, double GimbalPitch_controlled, double GimbalPitch_tolerance, double& pitchRate) {
     if (GimbalPitch_controlled < GimbalPitch - GimbalPitch_tolerance) {
         pitchRate = -0.2;
+//        pitchRate = 0;
         fotokite->gimbalPitch(pitchRate); // decrease pitch
         // cout<<"pitch: "<<"-0.1"<<"\t";
     } else if (GimbalPitch_controlled > GimbalPitch + GimbalPitch_tolerance) {
         pitchRate = 0.2;
+//        pitchRate = 0;
         fotokite->gimbalPitch(pitchRate); // increase pitch
         // cout<<"pitch: "<<"+0.1"<<"\t";
     } else {
@@ -246,7 +248,7 @@ int main(int argc, char *argv[]) {
 
     // Initialize camera
     // VideoCapture cap("rtsp://192.168.2.202/z3-1.mp4");
-    VideoCapture cap(0);
+    VideoCapture cap(1);
 
     //    double fx = 1.002560636338565e+03; // Mac webcam
     //    double fy = 1.003227769508857e+03;
@@ -363,6 +365,9 @@ int main(int argc, char *argv[]) {
         double t3 = +2.0 * (QW * QX + QY * QZ); // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
         double t4 = +1.0 - 2.0 * (QX * QX + QY * QY);
         double yaw = -atan2(t3, t4) - PI / 2; // need to find the sign of yaw, substract 90 degrees for initialization
+        if (yaw < - PI){
+            yaw = yaw + 2 * PI; // -270 < yaw < 90, need to transfer to (-180, 180), to align with 
+        }
 
         double relTetherLength = fotokite->getRelTetherLength() / tetherScale; // all signs need to be verified 
         double Elevation = 1.57 - fotokite->getElevation();

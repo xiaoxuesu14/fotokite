@@ -95,6 +95,8 @@
       </df>
       <df name="logs">
         <df name="apriltag">
+          <df name="test logs">
+          </df>
         </df>
         <df name="features">
         </df>
